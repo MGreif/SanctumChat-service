@@ -16,23 +16,23 @@ use axum::{
     Json, Router,
 };
 use tracing;
-mod person;
 use diesel::{pg, Connection, r2d2 };
 mod models;
 mod schema;
-use self::models::RootDTO;
+use self::models::UserDTO;
 use diesel::prelude::*;
-use self::schema::root::dsl::*;
 mod config;
 use config::*;
+mod handler;
+use handler::user_handler;
 
 #[derive(Debug, serde::Deserialize)]
 struct QueryDTO {
     age: String
 }
 
-fn generate_random_data(prefix: String) -> Vec<RootDTO> {
-    let mut random_data: Vec<RootDTO> = vec![];
+fn generate_random_data(prefix: String) -> Vec<UserDTO> {
+    let mut random_data: Vec<UserDTO> = vec![];
     random_data
 }
 
@@ -64,11 +64,7 @@ async fn main() {
     //let values: Vec<RootDTO> = vec![RootDTO { name: String::from("SomeName") }];
     //let results = diesel::insert_into(root).values(values).execute(&mut connection).expect("Could not insert");
 
-    async fn rootRoute(state: axum::extract::Extension<Arc<AppState>>) -> String {
-        let mut db_conn = state.db_pool.get().expect("asd");
-        let names: Vec<String> = root.select(name).load(&mut db_conn).expect("asd");
-        format!("{}", serde_json::to_string(&names).unwrap())
-    }
+
 
     async fn get_random_data() -> String {
         let random_data = generate_random_data(String::from("Preee"));
@@ -78,7 +74,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/getRandomData", get(get_random_data))
-        .route("/change", get(rootRoute))
+        .route("/users", get(user_handler::get_users).post(user_handler::create_user))
         .layer(Extension(app_state));
 
 
