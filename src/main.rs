@@ -42,8 +42,6 @@ async fn main() {
     let app = Router::new()
         .route("/users", get(user_handler::get_users).post(user_handler::create_user))
         .layer(Extension(app_state));
-
-
     
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     tracing::debug!("listening on {}", addr);

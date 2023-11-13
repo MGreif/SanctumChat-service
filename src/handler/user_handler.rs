@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use axum::{extract::Json, response::IntoResponse};
+use axum::{extract::{Json, Query}, response::IntoResponse};
 use tracing::info;
 use super::super::schema::users::dsl::*;
 use serde_json::json;
@@ -26,9 +26,21 @@ pub struct UserCreateDTO {
     pub age: i32
 }
 
-pub async fn get_users(state: axum::extract::Extension<Arc<AppState>>) -> String {
+#[derive(serde::Deserialize)]
+pub struct GetUserQueryDTO {
+    pub name: Option<String>
+}
+
+pub async fn get_users(state: axum::extract::Extension<Arc<AppState>>, Query(query_params): Query<GetUserQueryDTO>) -> String {
+
     let mut db_conn = state.db_pool.get().expect("could not get database pool");
-    let names: Vec<UserDTO> = users.select(schema::users::all_columns).load(&mut db_conn).expect("could not select users");
+    let mut query: _ = users.into_boxed();
+
+    if let Some(query_name) = query_params.name {
+        query = query.filter(name.like(format!("%{}%", query_name)));
+    }
+
+    let names: Vec<UserDTO> = query.select(schema::users::all_columns).load(&mut db_conn).expect("could not select users");
     format!("{}", serde_json::to_string(&names).unwrap())
 }
 
@@ -39,7 +51,6 @@ pub async fn create_user(state: axum::extract::Extension<Arc<AppState>>, Json(bo
         age: body.age,
         name: body.name
     };
-
 
     match DEFAULT_INPUT_FIELD_STRING_VALIDATOR.validate(&new_user.name) {
         Err(err) => {
