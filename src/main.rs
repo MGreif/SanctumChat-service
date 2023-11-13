@@ -13,6 +13,7 @@ mod schema;
 use diesel::prelude::*;
 mod config;
 mod handler;
+mod validation;
 use handler::user_handler;
 
 

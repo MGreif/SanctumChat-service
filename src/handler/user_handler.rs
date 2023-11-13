@@ -1,11 +1,12 @@
 use std::sync::Arc;
 use axum::{extract::Json, response::IntoResponse};
-use rust_websocket_server::schema::users::dsl::*;
+use tracing::info;
+use super::super::schema::users::dsl::*;
 use serde_json::json;
-use crate::{config::AppState, models::UserDTO};
-use rust_websocket_server::*;
+use crate::{config::AppState, models::{UserDTO, self}, schema, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR};
 use diesel::prelude::*;
 use rand::{thread_rng, Rng, distributions::Alphanumeric};
+
 
 fn generate_random_string(length: usize) -> String {
     let rng = thread_rng();
@@ -33,13 +34,22 @@ pub async fn get_users(state: axum::extract::Extension<Arc<AppState>>) -> String
 
 pub async fn create_user(state: axum::extract::Extension<Arc<AppState>>, Json(body): Json<UserCreateDTO>) -> impl IntoResponse {
     let mut db_conn = state.db_pool.get().expect("could not get database pool");
-    let newUser = models::UserDTO { 
+    let new_user = models::UserDTO { 
         id: generate_random_string(10),
         age: body.age,
         name: body.name
     };
 
-    let values = vec![newUser];
+
+    match DEFAULT_INPUT_FIELD_STRING_VALIDATOR.validate(&new_user.name) {
+        Err(err) => {
+            info!("{} - Validation error: {}", "name", err);
+            return axum::Json(json!({"message": err, "field": "name", }))
+        },
+        Ok(_) => {}
+    }
+
+    let values = vec![new_user];
     diesel::insert_into(schema::users::table).values(&values).execute(&mut db_conn).expect("Could not insert data");
 
     axum::Json(json!({"message": "User created successfully"}))
