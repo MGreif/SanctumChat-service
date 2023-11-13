@@ -2,13 +2,13 @@ use std::sync::Arc;
 use axum::{extract::Json, response::IntoResponse};
 use rust_websocket_server::schema::users::dsl::*;
 use serde_json::json;
-use crate::{config::AppState, models::{UserDTO}};
+use crate::{config::AppState, models::UserDTO};
 use rust_websocket_server::*;
 use diesel::prelude::*;
 use rand::{thread_rng, Rng, distributions::Alphanumeric};
 
 fn generate_random_string(length: usize) -> String {
-    let mut rng = thread_rng();
+    let rng = thread_rng();
 
     let random_string: String = rng
         .sample_iter(&Alphanumeric)
