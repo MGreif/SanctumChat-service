@@ -1,9 +1,11 @@
 use std::future::Future;
-use std::net::{TcpListener, TcpStream};
+use std::net::{TcpListener, TcpStream, AddrParseError};
 use std::io::{Read, Write};
 use std::sync::Arc;
 use axum::Extension;
-use diesel::r2d2::ConnectionManager;
+use axum::middleware::{ AddExtension };
+use config::{ConfigManager, EnvConfig, AppState};
+use diesel::r2d2::{ConnectionManager, Pool};
 use serde::Serialize;
 use std::net::SocketAddr;
 use axum::{
@@ -22,6 +24,7 @@ use self::models::RootDTO;
 use diesel::prelude::*;
 use self::schema::root::dsl::*;
 mod config;
+use config::*;
 
 #[derive(Debug, serde::Deserialize)]
 struct QueryDTO {
@@ -36,8 +39,14 @@ fn generate_random_data(prefix: String) -> Vec<RootDTO> {
 
 
 
-fn get_connection_pool() {
-    let manager = ConnectionManager::<PgConnection>::new()
+fn get_connection_pool(envConfig: EnvConfig) -> Pool<ConnectionManager<PgConnection>> {
+    let manager = ConnectionManager::<PgConnection>::new(envConfig.DATABASE_URL);
+    let pool = Pool::new(manager).expect("Failed to create connection pool");
+    pool
+}
+
+fn get_app_state(pool: Pool<ConnectionManager<PgConnection>>) -> Arc<AppState> {
+    AppState::new(pool)
 }
 
 #[tokio::main]
@@ -45,15 +54,20 @@ async fn main() {
     let subscriber = tracing_subscriber::fmt::Subscriber::builder()
         .with_max_level(tracing::Level::INFO)
         .finish();
-    let config = config::ConfigManager::new();
     tracing::subscriber::set_global_default(subscriber).expect("Failed to set subscriber");
-    let database_uri = env::var("DATABASE_URL").expect("could not establish connectoin");
-    let mut connection: PgConnection = pg::PgConnection::establish(&database_uri).unwrap();
-    let values: Vec<RootDTO> = vec![RootDTO { name: String::from("SomeName") }];
-    let results = diesel::insert_into(root).values(values).execute(&mut connection).expect("Could not insert");
-    let mut p1 = person::Person::new("Carl", 20);
-    async fn rootRoute(Extension(ext): Extension<String>) -> String {
-        ext
+
+
+    let config = config::ConfigManager::new();
+    let pool = get_connection_pool(config.env);
+    let app_state = get_app_state(pool);
+
+    //let values: Vec<RootDTO> = vec![RootDTO { name: String::from("SomeName") }];
+    //let results = diesel::insert_into(root).values(values).execute(&mut connection).expect("Could not insert");
+
+    async fn rootRoute(state: axum::extract::Extension<Arc<AppState>>) -> String {
+        let mut db_conn = state.db_pool.get().expect("asd");
+        let names: Vec<String> = root.select(name).load(&mut db_conn).expect("asd");
+        format!("{}", serde_json::to_string(&names).unwrap())
     }
 
     async fn get_random_data() -> String {
@@ -64,7 +78,8 @@ async fn main() {
 
     let app = Router::new()
         .route("/getRandomData", get(get_random_data))
-        .route("/change", get(rootRoute));
+        .route("/change", get(rootRoute))
+        .layer(Extension(app_state));
 
 
     

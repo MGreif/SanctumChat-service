@@ -1,28 +1,33 @@
-use diesel::{r2d2, PgConnection};
+use diesel::{r2d2::{self, Pool, ConnectionManager}, PgConnection};
 use dotenv::dotenv;
-use std::env;
+use std::{env, sync::Arc};
 
 pub struct AppState {
-    db_pool: r2d2::Pool<r2d2::ConnectionManager<PgConnection>>,
+    pub db_pool: r2d2::Pool<r2d2::ConnectionManager<PgConnection>>,
+}
+
+impl AppState {
+    pub fn new(pool: Pool<ConnectionManager<PgConnection>>) -> Arc<Self> {
+        Arc::new(AppState { db_pool: pool })
+    }
 }
 
 #[derive(Debug, serde::Serialize)]
-struct EnvConfig {
+pub struct EnvConfig {
     pub DATABASE_URL: String
 }
 
 impl EnvConfig {
     pub fn new() -> EnvConfig {
         dotenv().ok();
-        let mut envConfig: EnvConfig;
-        envConfig.DATABASE_URL = env::var("DATABASE_URL").unwrap_or_default();
-        envConfig
+        
+        EnvConfig { DATABASE_URL: env::var("DATABASE_URL").expect("could not establish connection") }
     }
 }
 
 #[derive(Debug)]
 pub struct ConfigManager {
-    env: EnvConfig
+    pub env: EnvConfig
 }
 
 impl ConfigManager {
