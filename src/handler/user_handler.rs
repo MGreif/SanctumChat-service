@@ -1,10 +1,10 @@
 use std::sync::Arc;
-use axum::{extract::{Json, Query, State}, response::{IntoResponse, self, AppendHeaders}, http::{HeaderMap, header::{SET_COOKIE, self}, HeaderValue, HeaderName}};
+use axum::{extract::{Json, Query, State}, response::{IntoResponse}, http::{HeaderMap, header::{SET_COOKIE, self}}};
 use tracing::info;
 use super::super::schema::users::dsl::*;
-use serde_json::{json, Deserializer};
-use crate::{config::AppState, models::{UserDTO, self}, schema::{self, users}, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR, utils::jwt::{hash_string}};
-use diesel::{prelude::*};
+use serde_json::json;
+use crate::{config::AppState, models::{UserDTO, self}, schema::{self, users}, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR, utils::jwt::hash_string};
+use diesel::prelude::*;
 use rand::{thread_rng, Rng, distributions::Alphanumeric};
 use crate::utils::jwt::encrypt_user_cookie;
 
@@ -69,7 +69,7 @@ pub async fn create_user(State(state): State<Arc<AppState>>, Json(body): Json<Us
         Ok(_) => {}
     }
 
-    let encrypted_password = hash_string(&new_user.password, b"abcde");
+    let encrypted_password = hash_string(&new_user.password, state.config.env.HASHING_KEY.clone().as_bytes());
     new_user.password = encrypted_password;
     info!("{:?}", new_user);
 
@@ -108,7 +108,12 @@ pub async fn login(State(state): State<Arc<AppState>>, Json(body): Json<loginDTO
     }
 
     let mut pool = state.db_pool.get().expect("Could not establish pool connection");
-    let user_result: Result<(String, i32, String, String ), _> = users.select(users::all_columns).filter(name.eq(&username).and(password.eq(hash_string(&pw, b"abcde")))).first::<(String, i32, String, String )>(&mut pool);
+    let user_result: Result<(String, i32, String, String ), _> = users
+        .select(users::all_columns)
+        .filter(name
+            .eq(&username)
+            .and(password.eq(hash_string(&pw, state.config.env.HASHING_KEY.clone().as_bytes()))))
+        .first::<(String, i32, String, String )>(&mut pool);
 
     let user = match user_result {
         Err(err) => return (headers, axum::Json(json!({"message": "login failed, wrong username or password"}))),

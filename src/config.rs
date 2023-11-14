@@ -8,32 +8,37 @@ pub struct WebSocketClient {
 }
 pub struct AppState {
     pub db_pool: r2d2::Pool<r2d2::ConnectionManager<PgConnection>>,
-    pub broadcast: broadcast::Sender<String>
-
+    pub broadcast: broadcast::Sender<String>,
+    pub config: ConfigManager
 }
 
 impl AppState {
-    pub fn new(pool: Pool<ConnectionManager<PgConnection>>) -> Arc<Self> {
+    pub fn new(pool: Pool<ConnectionManager<PgConnection>>, config: ConfigManager) -> Arc<Self> {
         let (tx, _rx) = broadcast::channel(100);
 
-        Arc::new(AppState { db_pool: pool, broadcast: tx })
+        Arc::new( AppState { db_pool: pool, broadcast: tx, config: config })
     }
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, Clone)]
 pub struct EnvConfig {
-    pub DATABASE_URL: String
+    pub DATABASE_URL: String,
+    pub HASHING_KEY: String
 }
+
 
 impl EnvConfig {
     pub fn new() -> EnvConfig {
         dotenv().ok();
         
-        EnvConfig { DATABASE_URL: env::var("DATABASE_URL").expect("could not establish connection") }
+        EnvConfig {
+            DATABASE_URL: env::var("DATABASE_URL").expect("missing env DATABASE_URL"),
+            HASHING_KEY: env::var("HASHING_KEY").expect("missing env HASHING_KEY")
+        }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ConfigManager {
     pub env: EnvConfig
 }
