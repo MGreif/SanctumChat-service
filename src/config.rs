@@ -1,14 +1,22 @@
 use diesel::{r2d2::{self, Pool, ConnectionManager}, PgConnection};
 use dotenv::dotenv;
-use std::{env, sync::Arc};
+use std::{env, sync::Arc, collections::HashMap};
+use tokio::sync::{broadcast, Mutex};
 
+pub struct WebSocketClient {
+    pub id: String
+}
 pub struct AppState {
     pub db_pool: r2d2::Pool<r2d2::ConnectionManager<PgConnection>>,
+    pub broadcast: broadcast::Sender<String>
+
 }
 
 impl AppState {
     pub fn new(pool: Pool<ConnectionManager<PgConnection>>) -> Arc<Self> {
-        Arc::new(AppState { db_pool: pool })
+        let (tx, _rx) = broadcast::channel(100);
+
+        Arc::new(AppState { db_pool: pool, broadcast: tx })
     }
 }
 
