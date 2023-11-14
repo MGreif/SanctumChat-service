@@ -1,18 +1,22 @@
-use std::sync::Arc;
+use std::{sync::Arc, collections::HashMap};
+use axum::{response::Response, middleware::Next, http::{Request, StatusCode, HeaderValue, header::{SET_COOKIE, COOKIE}}, extract::{Query, State}, Extension};
+use tracing::info;
+use crate::{config::AppState, utils::jwt::validate_user_cookie};
+use crate::middlewares::cookies::Cookies;
 
-use axum::{response::Response, middleware::Next, http::{Request, StatusCode, HeaderValue}, extract::{Query, State}};
+pub async fn auth<B>( State(app_state): State<Arc<AppState>>, Extension(cookies): Extension<Cookies>, request: Request<B>, next: Next<B>) -> Result<Response, StatusCode> {
+    info!("{:?}", cookies);
 
-use crate::config::AppState;
+    let session_cookie = match cookies.cookies.get("session") {
+        None => return Err(StatusCode::UNAUTHORIZED),
+        Some(cookie) => cookie
+    };
 
-pub struct Q {
-    pub name: String
-}
+    match validate_user_cookie(session_cookie.to_owned(), app_state.config.env.HASHING_KEY.as_bytes()) {
+        Err(_) => return Err(StatusCode::UNAUTHORIZED),
+        Ok(_) => {},
+    };
 
-pub async fn auth<B>( State(app_state): State<Arc<AppState>>, request: Request<B>, next: Next<B>) -> Result<Response, StatusCode> {
-    let headers = request.headers();
-    if headers.get("auth").unwrap_or(&HeaderValue::from_static(&"")) == &"aaa" {
-        return Err(StatusCode::UNAUTHORIZED);
-    }
     let response: Response = next.run(request).await;
     Ok(response)
 }

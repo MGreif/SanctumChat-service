@@ -42,10 +42,11 @@ async fn main() {
     let app_state = get_app_state(pool, config.clone());
 
     let app = Router::new()
-        .route("/login", get( user_handler::login))
         .route("/users", get(user_handler::get_users).post(user_handler::create_user))
         .route("/ws", get(handler::ws_handler::ws_handler))
         .route_layer(middleware::from_fn_with_state(app_state.clone(), middlewares::auth::auth))
+        .route("/login", get( user_handler::login))
+        .route_layer(middleware::from_fn(middlewares::cookies::cookie_mw))
         .with_state(app_state)
         .with_state(config.clone());
     

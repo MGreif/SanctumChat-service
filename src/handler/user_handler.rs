@@ -120,7 +120,7 @@ pub async fn login(State(state): State<Arc<AppState>>, Json(body): Json<loginDTO
         Ok(result_id) => UserDTO {id: result_id.0, age: result_id.1, name: result_id.2, password: result_id.3 } 
     };
 
-    let session_cookie = encrypt_user_cookie(user);
+    let session_cookie = encrypt_user_cookie(user, state.config.env.HASHING_KEY.as_bytes());
     headers.insert(SET_COOKIE, format!("session={}", session_cookie).parse().unwrap());
 
 
