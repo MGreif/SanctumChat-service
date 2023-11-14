@@ -5,4 +5,5 @@ pub struct UserDTO {
     pub name: String,
     pub age: i32,
     pub id: String,
+    pub password: String
 }

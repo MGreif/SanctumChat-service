@@ -7,5 +7,7 @@ diesel::table! {
         age -> Int4,
         #[max_length = 30]
         id -> Varchar,
+        #[max_length = 64]
+        password -> Varchar,
     }
 }

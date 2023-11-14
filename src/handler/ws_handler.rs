@@ -1,12 +1,9 @@
-use std::{sync::Arc, collections::HashSet};
-use tokio::sync::{broadcast, Mutex};
+use std::sync::Arc;
 
 use axum::{
     extract::{ws::{WebSocketUpgrade, WebSocket, Message}, State},
-    response::{Response},
-    Router,
+    response::Response,
 };
-use futures::FutureExt;
 use futures::{sink::SinkExt, stream::StreamExt};
 
 
@@ -15,12 +12,12 @@ pub async fn ws_handler(ws: WebSocketUpgrade, State(app_state): State<Arc<AppSta
     ws.on_upgrade(|socket| handle_socket(socket, app_state))
 }
 
-async fn handle_socket(mut stream: WebSocket, app_state: Arc<AppState>) {
+async fn handle_socket(stream: WebSocket, app_state: Arc<AppState>) {
 
     let (mut sender, mut receiver) = stream.split();
     let mut rx = app_state.broadcast.subscribe();
 
-    sender.send(Message::Text(format!("You joined the channel"))).await.expect("crash lol");
+    sender.send(Message::Text(format!("You joined the channel"))).await.expect("Failed sending joining message");
     let msg = format!("someone joined.");
     tracing::debug!("{msg}");
     let _ = app_state.broadcast.send(msg);
@@ -31,7 +28,6 @@ async fn handle_socket(mut stream: WebSocket, app_state: Arc<AppState>) {
             if sender.send(Message::Text(msg)).await.is_err() {
                 break;
             }
-
         }
     });
 

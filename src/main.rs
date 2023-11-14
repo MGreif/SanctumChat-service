@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use axum::Extension;
+use axum::{Extension, middleware};
 use config::{EnvConfig, AppState};
 use diesel::r2d2::{ConnectionManager, Pool};
 use std::net::SocketAddr;
@@ -15,6 +15,8 @@ mod config;
 mod handler;
 mod validation;
 use handler::user_handler;
+mod middlewares;
+mod utils;
 
 
 fn get_connection_pool(env_config: EnvConfig) -> Pool<ConnectionManager<PgConnection>> {
@@ -40,8 +42,10 @@ async fn main() {
     let app_state = get_app_state(pool);
 
     let app = Router::new()
+        .route("/login", get(user_handler::login))
         .route("/users", get(user_handler::get_users).post(user_handler::create_user))
         .route("/ws", get(handler::ws_handler::ws_handler))
+        .route_layer(middleware::from_fn_with_state(app_state.clone(), middlewares::auth::auth))
         .with_state(app_state);
     
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
