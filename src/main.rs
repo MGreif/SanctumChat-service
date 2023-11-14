@@ -1,10 +1,11 @@
 use std::sync::Arc;
-use axum::{Extension, middleware};
+use axum::{Extension, middleware, http::Method};
 use config::{EnvConfig, AppState, ConfigManager};
 use diesel::r2d2::{ConnectionManager, Pool};
+use tower_http::cors::{CorsLayer, Any, AllowHeaders};
 use std::net::SocketAddr;
 use axum::{
-    routing::get,
+    routing::{get, post},
     Router,
 };
 use tracing;
@@ -36,6 +37,10 @@ async fn main() {
         .finish();
     tracing::subscriber::set_global_default(subscriber).expect("Failed to set subscriber");
 
+    let cors = CorsLayer::new()
+    .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+    .allow_origin(Any)
+    .allow_headers(AllowHeaders::any());
 
     let config = config::ConfigManager::new();
     let pool = get_connection_pool(config.env.clone());
@@ -43,10 +48,11 @@ async fn main() {
 
     let app = Router::new()
         .route("/users", get(user_handler::get_users).post(user_handler::create_user))
-        .route("/ws", get(handler::ws_handler::ws_handler))
         .route_layer(middleware::from_fn_with_state(app_state.clone(), middlewares::auth::auth))
-        .route("/login", get( user_handler::login))
+        .route("/login", post( user_handler::login))
+        .route("/ws", get(handler::ws_handler::ws_handler))
         .route_layer(middleware::from_fn(middlewares::cookies::cookie_mw))
+        .layer(cors)
         .with_state(app_state)
         .with_state(config.clone());
     

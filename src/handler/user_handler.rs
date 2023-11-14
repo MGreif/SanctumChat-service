@@ -121,7 +121,7 @@ pub async fn login(State(state): State<Arc<AppState>>, Json(body): Json<loginDTO
     };
 
     let session_cookie = encrypt_user_cookie(user, state.config.env.HASHING_KEY.as_bytes());
-    headers.insert(SET_COOKIE, format!("session={}", session_cookie).parse().unwrap());
+    headers.insert(SET_COOKIE, format!("session={}; Domain=localhost; Max-Age=2592000", session_cookie).parse().unwrap());
 
 
     (headers, axum::Json(json!({"message": "login successful"})))
