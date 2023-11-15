@@ -1,24 +1,36 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::{ws::{WebSocketUpgrade, WebSocket, Message}, State},
-    response::Response,
+    extract::{ws::{WebSocketUpgrade, WebSocket, Message}, State, Query}, response::Response,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
+use tracing::info;
+use crate::{config::AppState, utils::jwt::{validate_user_cookie, token_into_typed}};
 
-
-use crate::config::AppState;
-pub async fn ws_handler(ws: WebSocketUpgrade, State(app_state): State<Arc<AppState>>) -> Response {
-    ws.on_upgrade(|socket| handle_socket(socket, app_state))
+#[derive(serde::Deserialize)]
+pub struct WsQuery {
+    token: String
 }
 
-async fn handle_socket(stream: WebSocket, app_state: Arc<AppState>) {
+pub async fn ws_handler(ws: WebSocketUpgrade, State(app_state): State<Arc<AppState>>, Query(query): Query<WsQuery>) -> Response {
+    ws.on_upgrade(|socket| handle_socket(socket, app_state, query))
+}
+
+async fn handle_socket(stream: WebSocket, app_state: Arc<AppState>, query: WsQuery) {
 
     let (mut sender, mut receiver) = stream.split();
+    info!("{}", query.token.clone());
+    if !validate_user_cookie(query.token.clone(), app_state.config.env.HASHING_KEY.as_bytes()).unwrap() {
+        sender.send(Message::Text(String::from("Not authorized"))).await.unwrap();
+        return
+    } 
+
+    let token = token_into_typed(query.token.clone(), app_state.config.env.HASHING_KEY.as_bytes()).unwrap();
+
     let mut rx = app_state.broadcast.subscribe();
 
     sender.send(Message::Text(format!("You joined the channel"))).await.expect("Failed sending joining message");
-    let msg = format!("someone joined.");
+    let msg = format!("{} joined.", token.sub);
     tracing::debug!("{msg}");
     let _ = app_state.broadcast.send(msg);
 
@@ -38,7 +50,7 @@ async fn handle_socket(stream: WebSocket, app_state: Arc<AppState>) {
     let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(Message::Text(text))) = receiver.next().await {
             // Add username before message.
-            let _ = tx.send(format!("Someone: {text}"));
+            let _ = tx.send(format!("{}: {text}", token.sub));
         }
     });
 

@@ -5,6 +5,10 @@ use std::collections::BTreeMap;
 
 use crate::models::UserDTO;
 
+pub struct Token {
+    pub sub: String
+}
+
 pub fn encrypt_user_cookie(user: UserDTO, secret_key: &[u8]) -> String {
     let key: Hmac<Sha256> = Hmac::new_from_slice(secret_key).unwrap();
     let mut claims = BTreeMap::new();
@@ -24,7 +28,19 @@ pub fn validate_user_cookie(token: String, secret_key: &[u8]) -> Result<bool, St
     };
 
     return Ok(true)
+}
 
+pub fn token_into_typed(token: String, secret_key: &[u8]) -> Result<Token, String> {
+    let key: Hmac<Sha256> = Hmac::new_from_slice(secret_key).unwrap();
+    let claims_wrapped: Result<BTreeMap<String, String>, jwt::Error> = token.verify_with_key(&key);
+
+
+    let claims = match claims_wrapped {
+        Err(err) => return Err("Error validating user cookie".to_owned()),
+        Ok(res) => res,
+    };
+
+    return Ok(Token { sub: claims.get("sub").unwrap().to_owned() })
 }
 
 pub fn hash_string(string: &str, secret_key: &[u8]) -> String {

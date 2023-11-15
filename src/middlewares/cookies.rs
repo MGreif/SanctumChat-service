@@ -1,5 +1,5 @@
 use std::{collections::HashMap, sync::Arc};
-use axum::{http::{Request, StatusCode, header::{SET_COOKIE, COOKIE}}, extract::State, middleware::Next, response::Response};
+use axum::{http::{Request, StatusCode, header::{SET_COOKIE, COOKIE}}, middleware::Next, response::Response};
 use crate::config::AppState;
 
 #[derive(Debug, serde::Deserialize, serde::Serialize, Clone)]
