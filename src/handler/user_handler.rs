@@ -1,10 +1,10 @@
 use std::sync::Arc;
-use axum::{extract::{Json, Query, State}, response::{IntoResponse}, http::{HeaderMap, header::{SET_COOKIE, self}}};
+use axum::{extract::{Json, Query, State}, response::{IntoResponse}, http::{HeaderMap, header::{SET_COOKIE, self}, StatusCode}, Extension};
 use tracing::info;
 use super::super::schema::users::dsl::*;
 use serde_json::json;
-use crate::{config::AppState, models::{UserDTO, self}, schema::{self, users}, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR, utils::jwt::hash_string};
-use diesel::prelude::*;
+use crate::{config::AppState, models::{UserDTO, self}, schema::{self, users}, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR, utils::jwt::{hash_string, validate_user_cookie}, middlewares::cookies::Cookies};
+use diesel::{prelude::*, expression::is_aggregate::No};
 use rand::{thread_rng, Rng, distributions::Alphanumeric};
 use crate::utils::jwt::encrypt_user_cookie;
 
@@ -121,8 +121,24 @@ pub async fn login(State(state): State<Arc<AppState>>, Json(body): Json<loginDTO
     };
 
     let session_cookie = encrypt_user_cookie(user, state.config.env.HASHING_KEY.as_bytes());
-    headers.insert(SET_COOKIE, format!("session={}; Domain=localhost; Max-Age=2592000", session_cookie).parse().unwrap());
+    headers.insert(SET_COOKIE, format!("session={}; Max-Age=2592000; Path=/; SameSite=None", session_cookie).parse().unwrap());
 
 
     (headers, axum::Json(json!({"message": "login successful", "token": session_cookie})))
+}
+
+#[derive(serde::Deserialize)]
+pub struct TokenParams {
+    token: String
+}
+
+pub async fn token(State(app_state): State<Arc<AppState>>, Json(body): Json<TokenParams>) -> (StatusCode, String) {
+    let session_cookie = body.token;
+
+    let is_valid = validate_user_cookie(session_cookie.clone(), app_state.config.env.HASHING_KEY.as_bytes());
+    
+    match is_valid {
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err),
+        Ok(_) => (StatusCode::OK, axum::Json::from(json!({"token": session_cookie})).to_string())
+    }
 }

@@ -49,6 +49,7 @@ async fn main() {
     let app = Router::new()
         .route("/users", get(user_handler::get_users).post(user_handler::create_user))
         .route_layer(middleware::from_fn_with_state(app_state.clone(), middlewares::auth::auth))
+        .route("/token", post( user_handler::token))
         .route("/login", post( user_handler::login))
         .route("/ws", get(handler::ws_handler::ws_handler))
         .route_layer(middleware::from_fn(middlewares::cookies::cookie_mw))
