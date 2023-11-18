@@ -238,7 +238,7 @@ pub async fn token(State(app_state): State<Arc<AppState>>, headers: HeaderMap) -
     let token = token_into_typed(auth_header.clone(), app_state.config.env.HASHING_KEY.as_bytes()).unwrap();
 
     let mut pool = app_state.db_pool.get().expect("Could not get db pool");
-    let user: UserDTO = users.select(all_columns).first(&mut pool).expect("Could not get user");
+    let user: UserDTO = users.select(all_columns).filter(id.eq(&token.sub)).first(&mut pool).expect("Could not get user");
 
     let mut p2p_state = app_state.p2p_connections.lock().await;
 
