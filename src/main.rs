@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use axum::{Extension, middleware, http::Method};
+use axum::{middleware, http::Method};
 use config::{EnvConfig, AppState, ConfigManager};
 use diesel::r2d2::{ConnectionManager, Pool};
 use tower_http::cors::{CorsLayer, Any, AllowHeaders};
@@ -48,7 +48,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/users", get(user_handler::get_users).post(user_handler::create_user))
-        .route_layer(middleware::from_fn_with_state(app_state.clone(), middlewares::auth::auth))
+        .route_layer(middleware::from_fn_with_state(app_state.clone(), middlewares::auth::authBearer))
         .route("/token", post( user_handler::token))
         .route("/login", post( user_handler::login))
         .route("/ws", get(handler::ws_handler::ws_handler))

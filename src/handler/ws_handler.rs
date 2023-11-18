@@ -5,7 +5,7 @@ use axum::{
 };
 use futures::{sink::SinkExt, stream::StreamExt};
 use tracing::info;
-use crate::{config::AppState, utils::jwt::{validate_user_cookie, token_into_typed}};
+use crate::{config::AppState, utils::jwt::{validate_user_token, token_into_typed}};
 
 #[derive(serde::Deserialize)]
 pub struct WsQuery {
@@ -19,11 +19,17 @@ pub async fn ws_handler(ws: WebSocketUpgrade, State(app_state): State<Arc<AppSta
 async fn handle_socket(stream: WebSocket, app_state: Arc<AppState>, query: WsQuery) {
 
     let (mut sender, mut receiver) = stream.split();
-    info!("{}", query.token.clone());
-    if !validate_user_cookie(query.token.clone(), app_state.config.env.HASHING_KEY.as_bytes()).unwrap() {
-        sender.send(Message::Text(String::from("Not authorized"))).await.unwrap();
-        return
-    } 
+
+    let is_validated_result = validate_user_token(query.token.clone(), app_state.config.env.HASHING_KEY.as_bytes());
+
+    match is_validated_result {
+        Err(_) => {
+            sender.send(Message::Text(String::from("Not authorized"))).await.unwrap();
+            return
+
+        },
+        Ok(_) => {}
+    }
 
     let token = token_into_typed(query.token.clone(), app_state.config.env.HASHING_KEY.as_bytes()).unwrap();
 

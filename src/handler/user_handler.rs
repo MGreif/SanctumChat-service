@@ -1,12 +1,14 @@
 use std::sync::Arc;
-use axum::{extract::{Json, Query, State}, response::{IntoResponse}, http::{HeaderMap, header::{SET_COOKIE, self}, StatusCode}, Extension};
+use axum::{extract::{Json, Query, State}, response::IntoResponse, http::{HeaderMap, header::{SET_COOKIE, self}, StatusCode}};
 use tracing::info;
 use super::super::schema::users::dsl::*;
 use serde_json::json;
-use crate::{config::AppState, models::{UserDTO, self}, schema::{self, users}, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR, utils::jwt::{hash_string, validate_user_cookie}, middlewares::cookies::Cookies};
-use diesel::{prelude::*, expression::is_aggregate::No};
+use crate::{config::AppState, models::{UserDTO, self}, schema::{self, users}, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR, utils::jwt::{hash_string, validate_user_token}};
+use diesel::prelude::*;
 use rand::{thread_rng, Rng, distributions::Alphanumeric};
 use crate::utils::jwt::encrypt_user_cookie;
+use tokio::sync::broadcast;
+
 
 fn generate_random_string(length: usize) -> String {
     let rng = thread_rng();
@@ -116,10 +118,14 @@ pub async fn login(State(state): State<Arc<AppState>>, Json(body): Json<loginDTO
         .first::<(String, i32, String, String )>(&mut pool);
 
     let user = match user_result {
-        Err(err) => return (headers, axum::Json(json!({"message": "login failed, wrong username or password"}))),
+        Err(_) => return (headers, axum::Json(json!({"message": "login failed, wrong username or password"}))),
         Ok(result_id) => UserDTO {id: result_id.0, age: result_id.1, name: result_id.2, password: result_id.3 } 
     };
 
+    let mut p2p_state = state.p2p_connections.lock().await;
+    p2p_state.insert(user.id.clone(), broadcast::channel(20).0);
+
+    info!("amount of p2p_connections: {}", p2p_state.len());
     let session_cookie = encrypt_user_cookie(user, state.config.env.HASHING_KEY.as_bytes());
     headers.insert(SET_COOKIE, format!("session={}; Max-Age=2592000; Path=/; SameSite=None", session_cookie).parse().unwrap());
 
@@ -135,7 +141,7 @@ pub struct TokenParams {
 pub async fn token(State(app_state): State<Arc<AppState>>, Json(body): Json<TokenParams>) -> (StatusCode, String) {
     let session_cookie = body.token;
 
-    let is_valid = validate_user_cookie(session_cookie.clone(), app_state.config.env.HASHING_KEY.as_bytes());
+    let is_valid = validate_user_token(session_cookie.clone(), app_state.config.env.HASHING_KEY.as_bytes());
     
     match is_valid {
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err),
