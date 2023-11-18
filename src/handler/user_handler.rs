@@ -97,18 +97,17 @@ pub async fn logout(State(state): State<Arc<AppState>>, header: HeaderMap) -> im
         Some(token) => token_into_typed(token.to_str().unwrap().to_owned().replace("Bearer ", ""), state.config.env.HASHING_KEY.as_bytes()).unwrap()
     };
 
-    let user_tx = state.p2p_connections.lock().await.remove_entry(&token.sub);
+    let mut p2p_connection = state.p2p_connections.lock().await;
+    let session_manager = p2p_connection.get(&token.sub).expect("Could not get session manager");
+    session_manager.lock().await.notify_offline().await;
+    let user_tx = p2p_connection.remove_entry(&token.sub);
 
-    info!("amount of active p2p {}", state.p2p_connections.lock().await.len());
-    info!("p2p {:?}", state.p2p_connections.lock().await);
     let (user_id, user_tx) = match user_tx {
         None => {
             return axum::Json(json!({"message": "user not p2p pool"}))
         },
         Some(tx) => tx,
     };
-
-    state.broadcast.send(format!("{} logged out", user_id)).unwrap(); // adjust this to send a json meta message that will be handled by the UI, which will then remove the 'online dot'
 
     axum::Json(json!({"message": "logged out"}))
 }
@@ -188,7 +187,6 @@ pub async fn prepare_user_session_manager(user: &UserDTO, p2p_state: &mut future
 
     let self_session_manager = Arc::new(Mutex::new(SessionManager::new(user.clone())));
 
-
     for (friend_id, friend_session_manager) in friends_in_p2p_state.iter() {
         if friend_id == &user.id {
             info!("Found same id {} {}", friend_id, user.name);
@@ -205,12 +203,8 @@ pub async fn prepare_user_session_manager(user: &UserDTO, p2p_state: &mut future
         drop(self_session_manager);
     }
 
-
-
-
-
     let self_session_manager_locked = self_session_manager.lock().await;
-    
+    self_session_manager_locked.notify_online().await;
     info!("{} has {:?} online friends", user.name, self_session_manager_locked.friends.lock().await.len());
 
     self_session_manager.to_owned()
