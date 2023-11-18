@@ -39,7 +39,7 @@ pub struct FriendSessionManager {
 
 #[derive(serde::Deserialize, Debug, Clone)]
 pub struct SocketMessage {
-    pub recipient: String,
+    pub recipient: Option<String>,
     pub message: String
 }
 
@@ -64,10 +64,10 @@ async fn handle_socket(stream: WebSocket, app_state: Arc<AppState>, query: WsQue
 
     let token = token_into_typed(query.token.clone(), app_state.config.env.HASHING_KEY.as_bytes()).unwrap();
 
-    let p2p_connection =app_state.p2p_connections.lock().await;
+    let app_state_current = app_state.clone();
+    let p2p_connection = app_state_current.p2p_connections.lock().await;
     let client_session = p2p_connection.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await.clone();
     // get friendSessionManager
-    let friends = client_session.friends.clone();
 
     let mut client_rx = client_session.user_socket.subscribe();
     let client_tx = Arc::new(Mutex::new(client_session.user_socket.clone()));
@@ -99,13 +99,26 @@ async fn handle_socket(stream: WebSocket, app_state: Arc<AppState>, query: WsQue
     let mut receive_task = tokio::spawn(async move {
         while let Some(Ok(Message::Text(text))) = receiver.next().await {
             let message: SocketMessage = from_str(&text).expect(&format!("Could not deserialize {}", text));
-            let friends = friends.lock().await.clone();
-            info!("[name: {}]{} - friends {:?} - {}", token.name, message.recipient, friends, friends.len());
-            let recipient_session = friends.get(&message.recipient).expect("Could not get recipient session");
-            let recipient_tx = recipient_session.socket.clone();
+            if let None = message.recipient {
+                continue;
+            }
+            // Get fresh connection to get latest state
+            let client_session = app_state.clone().p2p_connections.lock().await.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await.clone();
+            let friends = client_session.friends.lock().await;
+
+            info!("[name: {}]{} - friends {:?} - {}", token.name, message.recipient.clone().unwrap(), friends, friends.len());
+
+            let recipient_session = friends.get(&message.recipient.unwrap());
+
+            if let Some(session) = recipient_session {
+                let recipient_tx = session.socket.clone();
         
-            recipient_tx.send(format!("{}: {}", token.name, message.message)).expect("Could not send message");
-            client_tx.lock().await.send(format!("you: {}", message.message)).unwrap();
+                recipient_tx.send(format!("{}: {}", token.name, message.message)).expect("Could not send message");
+                client_tx.lock().await.send(format!("you: {}", message.message)).unwrap();    
+            } else if let None = recipient_session {
+                client_tx.lock().await.send(format!("Recipient is offline")).unwrap();    
+            }
+
         }
     });
 

@@ -153,7 +153,7 @@ pub async fn login(State(state): State<Arc<AppState>>, Json(body): Json<loginDTO
 
     let mut p2p_state = state.p2p_connections.lock().await;
 
-    let session_manager = prepare_user_session_manager(&user, &p2p_state).await;
+    let session_manager = prepare_user_session_manager(&user, &mut p2p_state).await;
 
     p2p_state.insert(user.id.clone(), session_manager.to_owned());
 
@@ -172,10 +172,13 @@ pub struct TokenParams {
 
 
 
-pub async fn prepare_user_session_manager(user: &UserDTO, p2p_state: &futures::lock::MutexGuard<'_, HashMap<std::string::String, Arc<futures::lock::Mutex<SessionManager>>>>) -> Arc<Mutex<SessionManager>> {
+pub async fn prepare_user_session_manager(user: &UserDTO, p2p_state: &mut futures::lock::MutexGuard<'_, HashMap<std::string::String, Arc<futures::lock::Mutex<SessionManager>>>>) -> Arc<Mutex<SessionManager>> {
     // get friends from some source
     // Currently only getting other active users, because 'friends' is not implemented yet
-    let friends_in_p2p_state = p2p_state.clone(); // This has to be exchanged with an iteration and filtering only the p2p_connections that are the friends
+    let friends_in_p2p_state = p2p_state; // This has to be exchanged with an iteration and filtering only the p2p_connections that are the friends
+
+
+
 
     // TODO: Iterate through friends
     // Check if friend is in p2p_state
@@ -186,15 +189,24 @@ pub async fn prepare_user_session_manager(user: &UserDTO, p2p_state: &futures::l
     let self_session_manager = Arc::new(Mutex::new(SessionManager::new(user.clone())));
 
 
-
     for (friend_id, friend_session_manager) in friends_in_p2p_state.iter() {
-        let friend_socket = friend_session_manager.lock().await.user_socket.clone();
+        if friend_id == &user.id {
+            info!("Found same id {} {}", friend_id, user.name);
+            continue
+        };
 
+        let friend_session = friend_session_manager.lock().await;
+        let friend_socket = friend_session.user_socket.clone();
+        friend_session.friends.lock().await.insert(user.id.clone(), FriendSessionManager { socket: self_session_manager.lock().await.user_socket.clone() });
         let self_session_manager = self_session_manager.lock().await;
         let mut self_friends = self_session_manager.friends.lock().await;
         self_friends.insert(friend_id.clone(), FriendSessionManager { socket: friend_socket  });
-
+        drop(self_friends);
+        drop(self_session_manager);
     }
+
+
+
 
 
     let self_session_manager_locked = self_session_manager.lock().await;
@@ -230,7 +242,7 @@ pub async fn token(State(app_state): State<Arc<AppState>>, headers: HeaderMap) -
 
     let mut p2p_state = app_state.p2p_connections.lock().await;
 
-    let session_manager = prepare_user_session_manager(&user, &p2p_state).await;
+    let session_manager = prepare_user_session_manager(&user, &mut p2p_state).await;
 
     p2p_state.insert(token.sub, session_manager);
 
