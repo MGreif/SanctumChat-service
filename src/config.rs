@@ -4,11 +4,13 @@ use futures::lock::Mutex;
 use std::{env, sync::Arc, collections::HashMap};
 use tokio::sync::broadcast;
 
+use crate::handler::ws_handler::SessionManager;
+
 pub struct AppState {
     pub db_pool: r2d2::Pool<r2d2::ConnectionManager<PgConnection>>,
     pub broadcast: broadcast::Sender<String>,
     // Hashmap of currently logged in users
-    pub p2p_connections: Mutex<HashMap<String, broadcast::Sender<String>>>,
+    pub p2p_connections: Mutex<HashMap<String, Arc<Mutex<SessionManager>>>>,
     pub config: ConfigManager
 }
 
