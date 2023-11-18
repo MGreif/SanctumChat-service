@@ -3,7 +3,7 @@ use axum::{extract::{Json, Query, State}, response::IntoResponse, http::{HeaderM
 use tracing::info;
 use super::super::schema::users::dsl::*;
 use serde_json::json;
-use crate::{config::AppState, models::{UserDTO, self}, schema::{self, users}, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR, utils::jwt::{hash_string, validate_user_token}};
+use crate::{config::AppState, models::{UserDTO, self}, schema::{self, users}, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR, utils::jwt::{hash_string, validate_user_token, token_into_typed}};
 use diesel::prelude::*;
 use rand::{thread_rng, Rng, distributions::Alphanumeric};
 use crate::utils::jwt::encrypt_user_cookie;
@@ -119,7 +119,7 @@ pub async fn login(State(state): State<Arc<AppState>>, Json(body): Json<loginDTO
 
     let user = match user_result {
         Err(_) => return (headers, axum::Json(json!({"message": "login failed, wrong username or password"}))),
-        Ok(result_id) => UserDTO {id: result_id.0, age: result_id.1, name: result_id.2, password: result_id.3 } 
+        Ok(result_id) => UserDTO { name: result_id.0, age: result_id.1, id: result_id.2, password: result_id.3 } 
     };
 
     let mut p2p_state = state.p2p_connections.lock().await;
@@ -144,7 +144,14 @@ pub async fn token(State(app_state): State<Arc<AppState>>, Json(body): Json<Toke
     let is_valid = validate_user_token(session_cookie.clone(), app_state.config.env.HASHING_KEY.as_bytes());
     
     match is_valid {
-        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err),
-        Ok(_) => (StatusCode::OK, axum::Json::from(json!({"token": session_cookie})).to_string())
+        Err(err) => {return (StatusCode::INTERNAL_SERVER_ERROR, err)},
+        Ok(_) => {}
     }
+
+    let token = token_into_typed(session_cookie.clone(), app_state.config.env.HASHING_KEY.as_bytes()).unwrap();
+
+
+
+
+    (StatusCode::OK, axum::Json::from(json!({"token": session_cookie})).to_string())
 }
