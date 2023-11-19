@@ -10,7 +10,7 @@ pub struct Token {
     pub name: String
 }
 
-pub fn encrypt_user_cookie(user: UserDTO, secret_key: &[u8]) -> String {
+pub fn encrypt_user_token(user: UserDTO, secret_key: &[u8]) -> String {
     let key: Hmac<Sha256> = Hmac::new_from_slice(secret_key).unwrap();
     let mut claims = BTreeMap::new();
     claims.insert("sub", user.id);

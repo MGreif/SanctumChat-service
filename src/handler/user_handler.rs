@@ -1,15 +1,12 @@
-use std::{sync::Arc, collections::HashMap};
-use axum::{extract::{Json, Query, State, ws::Message}, response::IntoResponse, http::{HeaderMap, header::{SET_COOKIE, self}, StatusCode}};
-use futures::lock::Mutex;
+use std::sync::Arc;
+use axum::{extract::{Json, Query, State}, response::IntoResponse, http::{HeaderMap, header::{SET_COOKIE, self}, StatusCode}};
 use tracing::info;
-use super::{super::schema::users::dsl::*, ws_handler::FriendSessionManager};
+use crate::{schema::users::dsl::*, helper::session::get_friends_in_p2p};
 use serde_json::json;
-use crate::{config::AppState, models::{UserDTO, self}, schema::{self, users::{self, all_columns}}, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR, utils::jwt::{hash_string, validate_user_token, token_into_typed}, handler::ws_handler::SessionManager};
+use crate::{config::AppState, models::{UserDTO, self}, schema::{self, users::{self, all_columns}}, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR, utils::jwt::{hash_string, validate_user_token, token_into_typed}, helper::session::{prepare_user_session_manager, update_user_friends}};
 use diesel::prelude::*;
 use rand::{thread_rng, Rng, distributions::Alphanumeric};
-use crate::utils::jwt::encrypt_user_cookie;
-use tokio::sync::broadcast;
-
+use crate::utils::jwt::encrypt_user_token;
 
 fn generate_random_string(length: usize) -> String {
     let rng = thread_rng();
@@ -35,7 +32,7 @@ pub struct GetUserQueryDTO {
     pub name: Option<String>
 }
 
-pub async fn get_users(State(state): State<Arc<AppState>>, Query(query_params): Query<GetUserQueryDTO>) -> String {
+pub async fn get_users<'a>(State(state): State<Arc<AppState<'a>>>, Query(query_params): Query<GetUserQueryDTO>) -> String {
 
     let mut db_conn = state.db_pool.get().expect("could not get database pool");
     let mut query: _ = users.into_boxed();
@@ -48,7 +45,7 @@ pub async fn get_users(State(state): State<Arc<AppState>>, Query(query_params): 
     format!("{}", serde_json::to_string(&names).unwrap())
 }
 
-pub async fn create_user(State(state): State<Arc<AppState>>, Json(body): Json<UserCreateDTO>) -> impl IntoResponse {
+pub async fn create_user<'a>(State(state): State<Arc<AppState<'a>>>, Json(body): Json<UserCreateDTO>) -> impl IntoResponse {
     let mut db_conn = state.db_pool.get().expect("could not get database pool");
     let mut new_user = models::UserDTO { 
         id: generate_random_string(10),
@@ -83,12 +80,12 @@ pub async fn create_user(State(state): State<Arc<AppState>>, Json(body): Json<Us
 }
 
 #[derive(serde::Deserialize)]
-pub struct loginDTO {
+pub struct LoginDTO {
     pub username: String,
     pub password: String
 }
 
-pub async fn logout(State(state): State<Arc<AppState>>, header: HeaderMap) -> impl IntoResponse {
+pub async fn logout<'a>(State(state): State<Arc<AppState<'a>>>, header: HeaderMap) -> impl IntoResponse {
     let token = header.get("authorization");
     let token = match token {
         None => {
@@ -98,22 +95,32 @@ pub async fn logout(State(state): State<Arc<AppState>>, header: HeaderMap) -> im
     };
 
     let mut p2p_connection = state.p2p_connections.lock().await;
+
     let session_manager = p2p_connection.get(&token.sub).expect("Could not get session manager");
     session_manager.lock().await.notify_offline().await;
+
+    // Remove user from logged in sessions
     let user_tx = p2p_connection.remove_entry(&token.sub);
 
-    let (user_id, user_tx) = match user_tx {
+    let friends = get_friends_in_p2p(&p2p_connection);
+    
+    // Remoe user from currently logged in friends 'active_friends'
+    for (_, friend_user_session_manager) in friends {
+        friend_user_session_manager.lock().await.remove_friend(&token.sub).await;
+    }
+
+    match user_tx {
         None => {
             return axum::Json(json!({"message": "user not p2p pool"}))
         },
-        Some(tx) => tx,
+        Some(_) => {},
     };
 
     axum::Json(json!({"message": "logged out"}))
 }
 
-pub async fn login(State(state): State<Arc<AppState>>, Json(body): Json<loginDTO>) -> impl IntoResponse {
-    let loginDTO { password: pw, username } = body;
+pub async fn login<'a>(State(state): State<Arc<AppState<'a>>>, Json(body): Json<LoginDTO>) -> impl IntoResponse {
+    let LoginDTO { password: pw, username } = body;
     let mut headers = HeaderMap::new();
     headers.insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
 
@@ -148,70 +155,21 @@ pub async fn login(State(state): State<Arc<AppState>>, Json(body): Json<loginDTO
         Ok(result_id) => UserDTO { name: result_id.0, age: result_id.1, id: result_id.2, password: result_id.3 } 
     };
 
-
-
     let mut p2p_state = state.p2p_connections.lock().await;
 
-    let session_manager = prepare_user_session_manager(&user, &mut p2p_state).await;
-
+    let session_manager = prepare_user_session_manager(&user, state.clone()).await;
+    update_user_friends(&user, state.clone()).await;
     p2p_state.insert(user.id.clone(), session_manager.to_owned());
 
 
-    let session_cookie = encrypt_user_cookie(user, state.config.env.HASHING_KEY.as_bytes());
-    headers.insert(SET_COOKIE, format!("session={}; Max-Age=2592000; Path=/; SameSite=None", session_cookie).parse().unwrap());
+    let session_token = encrypt_user_token(user, state.config.env.HASHING_KEY.as_bytes());
+    headers.insert(SET_COOKIE, format!("session={}; Max-Age=2592000; Path=/; SameSite=None", session_token).parse().unwrap());
 
 
-    (headers, axum::Json(json!({"message": "login successful", "token": session_cookie})))
+    (headers, axum::Json(json!({"message": "login successful", "token": session_token})))
 }
 
-#[derive(serde::Deserialize)]
-pub struct TokenParams {
-    token: String
-}
-
-
-
-pub async fn prepare_user_session_manager(user: &UserDTO, p2p_state: &mut futures::lock::MutexGuard<'_, HashMap<std::string::String, Arc<futures::lock::Mutex<SessionManager>>>>) -> Arc<Mutex<SessionManager>> {
-    // get friends from some source
-    // Currently only getting other active users, because 'friends' is not implemented yet
-    let friends_in_p2p_state = p2p_state; // This has to be exchanged with an iteration and filtering only the p2p_connections that are the friends
-
-
-
-
-    // TODO: Iterate through friends
-    // Check if friend is in p2p_state
-    // If yes, Append self as FriendSessionManager to friends 'friends'
-    // If not, friend is offline and not connected
-    // Currently not need because im getting friends directrly from p2p_state
-
-    let self_session_manager = Arc::new(Mutex::new(SessionManager::new(user.clone())));
-
-    for (friend_id, friend_session_manager) in friends_in_p2p_state.iter() {
-        if friend_id == &user.id {
-            info!("Found same id {} {}", friend_id, user.name);
-            continue
-        };
-
-        let friend_session = friend_session_manager.lock().await;
-        let friend_socket = friend_session.user_socket.clone();
-        friend_session.friends.lock().await.insert(user.id.clone(), FriendSessionManager { socket: self_session_manager.lock().await.user_socket.clone() });
-        let self_session_manager = self_session_manager.lock().await;
-        let mut self_friends = self_session_manager.friends.lock().await;
-        self_friends.insert(friend_id.clone(), FriendSessionManager { socket: friend_socket  });
-        drop(self_friends);
-        drop(self_session_manager);
-    }
-
-    let self_session_manager_locked = self_session_manager.lock().await;
-    self_session_manager_locked.notify_online().await;
-    info!("{} has {:?} online friends", user.name, self_session_manager_locked.friends.lock().await.len());
-
-    self_session_manager.to_owned()
-
-}
-
-pub async fn token(State(app_state): State<Arc<AppState>>, headers: HeaderMap) -> (StatusCode, String) {
+pub async fn token<'a>(State(app_state): State<Arc<AppState<'a>>>, headers: HeaderMap) -> (StatusCode, String) {
 
     let auth_header = match headers.get("authorization") {
         None => return (StatusCode::UNAUTHORIZED, String::from("No auth header provided")),
@@ -236,13 +194,10 @@ pub async fn token(State(app_state): State<Arc<AppState>>, headers: HeaderMap) -
 
     let mut p2p_state = app_state.p2p_connections.lock().await;
 
-    let session_manager = prepare_user_session_manager(&user, &mut p2p_state).await;
+    let session_manager = prepare_user_session_manager(&user, app_state.clone()).await;
+    update_user_friends(&user, app_state.clone()).await;
 
     p2p_state.insert(token.sub, session_manager);
-
-    info!("amount of active p2p {}", p2p_state.len());
-    info!("p2p {:?}", p2p_state);
-
 
     (StatusCode::OK, axum::Json::from(json!({"token": auth_header})).to_string())
 }

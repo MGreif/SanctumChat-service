@@ -6,53 +6,18 @@ use axum::{
 use futures::{sink::SinkExt, stream::StreamExt, lock::Mutex};
 use serde_json::{from_str, to_string, json};
 use tracing::info;
-use tokio::sync::broadcast;
-use crate::{config::AppState, utils::jwt::{validate_user_token, token_into_typed}, models::UserDTO};
+use crate::{config::AppState, utils::jwt::{validate_user_token, token_into_typed}};
 
 #[derive(serde::Deserialize)]
 pub struct WsQuery {
     token: String,
 }
 
-pub async fn ws_handler(ws: WebSocketUpgrade, State(app_state): State<Arc<AppState>>, Query(query): Query<WsQuery>) -> Response {
+pub async fn ws_handler<'a>(ws: WebSocketUpgrade, State(app_state): State<Arc<AppState<'a>>>, Query(query): Query<WsQuery>) -> Response {
     ws.on_upgrade(|socket| handle_socket(socket, app_state, query))
 }
 
-#[derive(Debug, Clone)]
-pub struct SessionManager {
-    pub friends: Arc<Mutex<HashMap<String, FriendSessionManager>>>,
-    pub user_socket: broadcast::Sender<SocketMessage>,
-    pub user: UserDTO
-}
 
-impl SessionManager {
-    pub fn new(user: UserDTO) -> SessionManager {
-        SessionManager { friends: Arc::new(Mutex::new(HashMap::new())), user_socket: broadcast::channel(20).0, user }
-    }
-
-    pub async fn notify_online(&self) {
-        for (friend_id, friend_session_manager) in self.friends.lock().await.iter() {
-            friend_session_manager.send_direct_message(SocketMessage::SocketMessageStatusChange(SocketMessageStatusChange { status: EEvent::ONLINE, user_id: self.user.id.clone() })).await;
-        }
-    }
-
-    pub async fn notify_offline(&self) {
-        for (friend_id, friend_session_manager) in self.friends.lock().await.iter() {
-            friend_session_manager.send_direct_message(SocketMessage::SocketMessageStatusChange(SocketMessageStatusChange { status: EEvent::OFFLINE, user_id: self.user.id.clone() })).await;
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct FriendSessionManager {
-    pub socket: broadcast::Sender<SocketMessage>
-}
-
-impl FriendSessionManager {
-    pub async fn send_direct_message(&self, message: SocketMessage) {
-        self.socket.send(message);
-    }
-}
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub struct SocketMessageDirect {
@@ -74,13 +39,13 @@ pub struct SocketMessageEvent {
 
 #[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]
 pub struct SocketMessageOnlineUsers {
-    online_users: Vec<String>
+    pub online_users: Vec<String>
 }
 
 #[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]
 pub struct SocketMessageStatusChange {
-    status: EEvent,
-    user_id: String
+    pub status: EEvent,
+    pub user_id: String
 }
 
 #[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]
@@ -94,16 +59,15 @@ pub enum SocketMessage {
 }
 
 
-async fn handle_socket(stream: WebSocket, app_state: Arc<AppState>, query: WsQuery) {
+async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState<'a>>, query: WsQuery) {
 
     let (sender, mut receiver) = stream.split();
 
     let sender = Arc::new(Mutex::new(sender));
 
+    let app_state_orig = app_state.clone();
 
-
-
-    let is_validated_result = validate_user_token(query.token.clone(), app_state.config.env.HASHING_KEY.as_bytes());
+    let is_validated_result = validate_user_token(query.token.clone(), &app_state_orig.config.env.HASHING_KEY.as_bytes());
     match is_validated_result {
         Err(_) => {
             sender.lock().await.send(Message::Text(String::from("Not authorized"))).await.unwrap();
@@ -113,32 +77,34 @@ async fn handle_socket(stream: WebSocket, app_state: Arc<AppState>, query: WsQue
         Ok(_) => {}
     }
 
-    let token = token_into_typed(query.token.clone(), app_state.config.env.HASHING_KEY.as_bytes()).unwrap();
+    let token = token_into_typed(query.token.clone(), app_state_orig.config.env.HASHING_KEY.as_bytes()).unwrap();
 
-    let app_state_current = app_state.clone();
-    let p2p_connection = app_state_current.p2p_connections.lock().await;
-    let client_session = p2p_connection.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await.clone();
-    // get friendSessionManager
+    let p2p_connection = app_state_orig.p2p_connections.lock().await;
+    let client_session = p2p_connection.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await;
+
 
     let mut client_rx = client_session.user_socket.subscribe();
-    let client_tx = Arc::new(Mutex::new(client_session.user_socket.clone()));
 
-    let friends = client_session.friends.lock().await.clone();
-    
+
+
+    // get online friends at client start/initialization
+    let friends = client_session.active_friends.lock().await;
+
     let mut online_friends: Vec<String> = vec![];
 
-    for (friend_id, _) in friends.iter() {
+    for friend_id in friends.iter() {
         online_friends.push(friend_id.to_owned());
     }
 
     drop(friends);
     drop(client_session);
+    drop(p2p_connection);
+
+
+
 
     let mess = SocketMessage::SocketMessageOnlineUsers(SocketMessageOnlineUsers { online_users: online_friends });
     sender.lock().await.send(Message::Text(to_string(&mess).unwrap())).await.expect("Failed sending joining message");
-
-    info!("amount of active p2p {}", p2p_connection.len());
-    info!("p2p {:?}", p2p_connection);
 
     sender.lock().await.send(Message::Text(format!("You joined the channel"))).await.expect("Failed sending joining message");
 
@@ -146,7 +112,7 @@ async fn handle_socket(stream: WebSocket, app_state: Arc<AppState>, query: WsQue
 
     let msg = format!("{} joined.", token.sub);
     tracing::debug!("{msg}");
-    let _ = app_state.broadcast.send(msg);
+    let _ = app_state_orig.broadcast.send(msg);
 
 
 
@@ -162,41 +128,34 @@ async fn handle_socket(stream: WebSocket, app_state: Arc<AppState>, query: WsQue
     // Spawn a task that takes messages from the websocket, prepends the user
     // name, and sends them to all broadcast subscribers.
 
+    let app_state_clone = app_state.clone();
+
     let mut receive_task = tokio::spawn(async move {
         while let Some(Ok(Message::Text(text))) = receiver.next().await {
             let message: SocketMessageDirect = from_str(&text).expect(&format!("Could not deserialize {}", text));
             if let None = message.recipient {
                 continue;
             }
+
+            let app_state_c = app_state_clone.clone();
+
             // Get fresh connection to get latest state
-            let client_session = app_state.clone().p2p_connections.lock().await.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await.clone();
-            let friends = client_session.friends.lock().await;
+            let client_session = &app_state_c.p2p_connections.lock().await.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await.clone();
+            let friends = client_session.active_friends.lock().await;
             let recipient = message.recipient.unwrap();
             info!("[name: {}]{} - friends {:?} - {}", token.name, &recipient, friends, friends.len());
 
-            let recipient_session = friends.get(&recipient);
+            let p2p = &app_state_c.p2p_connections.lock().await;
+            let recipient_sessin_manager = p2p.get(&recipient).unwrap().lock().await;
 
-            if let Some(session) = recipient_session {
-                let recipient_tx = session.socket.clone();
-        
-                // Send to recipient broadcast
-                recipient_tx.send(SocketMessage::SocketMessageDirect(SocketMessageDirect { sender: Some(token.sub.clone()), recipient: Some(recipient.clone()), message: message.message.clone() })).expect("Could not send message");
-                
-                // Send back to client broadcast to reflect for sender
-                client_tx.lock().await.send(
-                    SocketMessage::SocketMessageDirect(SocketMessageDirect { sender: Some(token.sub.clone()), recipient: Some(recipient), message: message.message.clone() })
-                ).unwrap();    
-                
-            } else if let None = recipient_session {
-                client_tx.lock().await.send(
-                    SocketMessage::SocketMessageDirect(SocketMessageDirect { sender: None, recipient: None, message: String::from("Recipient is offline") })
-                ).unwrap();    
-            }
-
+            // Send to recipient broadcast
+            recipient_sessin_manager.send_direct_message(SocketMessage::SocketMessageDirect(SocketMessageDirect { sender: Some(token.sub.clone()), recipient: Some(recipient.clone()), message: message.message.clone() })).await;
+            
+            // Send back to client broadcast to reflect for sender
+            client_session.send_direct_message(SocketMessage::SocketMessageDirect(SocketMessageDirect { sender: Some(token.sub.clone()), recipient: Some(recipient), message: message.message.clone() })).await; 
+            
         }
     });
-
-    drop(p2p_connection);
 
     tokio::select! {
         _ = (&mut receive_task) => {
