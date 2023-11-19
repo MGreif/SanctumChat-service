@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 use crate::models::UserDTO;
 
+#[derive(Debug, Clone)]
 pub struct Token {
     pub sub: String,
     pub name: String

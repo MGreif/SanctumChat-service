@@ -32,7 +32,7 @@ pub struct GetUserQueryDTO {
     pub name: Option<String>
 }
 
-pub async fn get_users<'a>(State(state): State<Arc<AppState<'a>>>, Query(query_params): Query<GetUserQueryDTO>) -> String {
+pub async fn get_users<'a>(State(state): State<Arc<AppState>>, Query(query_params): Query<GetUserQueryDTO>) -> String {
 
     let mut db_conn = state.db_pool.get().expect("could not get database pool");
     let mut query: _ = users.into_boxed();
@@ -45,7 +45,7 @@ pub async fn get_users<'a>(State(state): State<Arc<AppState<'a>>>, Query(query_p
     format!("{}", serde_json::to_string(&names).unwrap())
 }
 
-pub async fn create_user<'a>(State(state): State<Arc<AppState<'a>>>, Json(body): Json<UserCreateDTO>) -> impl IntoResponse {
+pub async fn create_user<'a>(State(state): State<Arc<AppState>>, Json(body): Json<UserCreateDTO>) -> impl IntoResponse {
     let mut db_conn = state.db_pool.get().expect("could not get database pool");
     let mut new_user = models::UserDTO { 
         id: generate_random_string(10),
@@ -85,7 +85,7 @@ pub struct LoginDTO {
     pub password: String
 }
 
-pub async fn logout<'a>(State(state): State<Arc<AppState<'a>>>, header: HeaderMap) -> impl IntoResponse {
+pub async fn logout<'a>(State(state): State<Arc<AppState>>, header: HeaderMap) -> impl IntoResponse {
     let token = header.get("authorization");
     let token = match token {
         None => {
@@ -119,7 +119,7 @@ pub async fn logout<'a>(State(state): State<Arc<AppState<'a>>>, header: HeaderMa
     axum::Json(json!({"message": "logged out"}))
 }
 
-pub async fn login<'a>(State(state): State<Arc<AppState<'a>>>, Json(body): Json<LoginDTO>) -> impl IntoResponse {
+pub async fn login<'a>(State(state): State<Arc<AppState>>, Json(body): Json<LoginDTO>) -> impl IntoResponse {
     let LoginDTO { password: pw, username } = body;
     let mut headers = HeaderMap::new();
     headers.insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
@@ -155,10 +155,11 @@ pub async fn login<'a>(State(state): State<Arc<AppState<'a>>>, Json(body): Json<
         Ok(result_id) => UserDTO { name: result_id.0, age: result_id.1, id: result_id.2, password: result_id.3 } 
     };
 
-    let mut p2p_state = state.p2p_connections.lock().await;
 
     let session_manager = prepare_user_session_manager(&user, state.clone()).await;
     update_user_friends(&user, state.clone()).await;
+    
+    let mut p2p_state = state.p2p_connections.lock().await;
     p2p_state.insert(user.id.clone(), session_manager.to_owned());
 
 
@@ -169,8 +170,8 @@ pub async fn login<'a>(State(state): State<Arc<AppState<'a>>>, Json(body): Json<
     (headers, axum::Json(json!({"message": "login successful", "token": session_token})))
 }
 
-pub async fn token<'a>(State(app_state): State<Arc<AppState<'a>>>, headers: HeaderMap) -> (StatusCode, String) {
-
+pub async fn token<'a>(State(app_state): State<Arc<AppState>>, headers: HeaderMap) -> (StatusCode, String) {
+    info!("token 1");
     let auth_header = match headers.get("authorization") {
         None => return (StatusCode::UNAUTHORIZED, String::from("No auth header provided")),
         Some(header) => {
@@ -181,6 +182,7 @@ pub async fn token<'a>(State(app_state): State<Arc<AppState<'a>>>, headers: Head
     };
 
     let is_valid = validate_user_token(auth_header.clone(), app_state.config.env.HASHING_KEY.as_bytes());
+    info!("token 2");
     
     match is_valid {
         Err(err) => {return (StatusCode::INTERNAL_SERVER_ERROR, err)},
@@ -188,16 +190,20 @@ pub async fn token<'a>(State(app_state): State<Arc<AppState<'a>>>, headers: Head
     }
 
     let token = token_into_typed(auth_header.clone(), app_state.config.env.HASHING_KEY.as_bytes()).unwrap();
+    info!("token 3");
 
     let mut pool = app_state.db_pool.get().expect("Could not get db pool");
     let user: UserDTO = users.select(all_columns).filter(id.eq(&token.sub)).first(&mut pool).expect("Could not get user");
+    info!("token 3.5");
 
-    let mut p2p_state = app_state.p2p_connections.lock().await;
+    info!("token 4");
 
     let session_manager = prepare_user_session_manager(&user, app_state.clone()).await;
+    info!("token 4.5");
     update_user_friends(&user, app_state.clone()).await;
-
+    let mut p2p_state = app_state.p2p_connections.lock().await;
     p2p_state.insert(token.sub, session_manager);
+    info!("token 5");
 
     (StatusCode::OK, axum::Json::from(json!({"token": auth_header})).to_string())
 }

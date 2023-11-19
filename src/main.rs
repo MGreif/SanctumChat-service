@@ -26,7 +26,7 @@ fn get_connection_pool(env_config: EnvConfig) -> Pool<ConnectionManager<PgConnec
     pool
 }
 
-fn get_app_state<'a>(pool: Pool<ConnectionManager<PgConnection>>, config: ConfigManager) -> AppState<'a> {
+fn get_app_state<'a>(pool: Pool<ConnectionManager<PgConnection>>, config: ConfigManager) -> AppState {
     AppState::new(pool, config)
 }
 
@@ -44,12 +44,12 @@ async fn main() {
 
     let config = config::ConfigManager::new();
     let pool = get_connection_pool(config.env.clone());
-    let app_state = Arc::new(AppState::new(pool, config));
+    let app_state = Arc::new(AppState::new(pool, config.clone()));
 
     let app = Router::new()
         .route("/users", get(user_handler::get_users).post(user_handler::create_user))
         .route("/logout", post(user_handler::logout))
-        .route_layer(middleware::from_fn_with_state(Arc::clone(&app_state), middlewares::auth::authBearer))
+        .route_layer(middleware::from_fn_with_state(app_state.clone(), middlewares::auth::authBearer))
         .route("/token", post( user_handler::token))
         .route("/login", post( user_handler::login))
         .route("/ws", get(handler::ws_handler::ws_handler))

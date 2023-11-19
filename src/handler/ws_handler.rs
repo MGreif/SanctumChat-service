@@ -1,4 +1,4 @@
-use std::{sync::Arc, collections::HashMap};
+use std::sync::Arc;
 
 use axum::{
     extract::{ws::{WebSocketUpgrade, WebSocket, Message}, State, Query}, response::Response,
@@ -13,7 +13,7 @@ pub struct WsQuery {
     token: String,
 }
 
-pub async fn ws_handler<'a>(ws: WebSocketUpgrade, State(app_state): State<Arc<AppState<'a>>>, Query(query): Query<WsQuery>) -> Response {
+pub async fn ws_handler<'a>(ws: WebSocketUpgrade, State(app_state): State<Arc<AppState>>, Query(query): Query<WsQuery>) -> Response {
     ws.on_upgrade(|socket| handle_socket(socket, app_state, query))
 }
 
@@ -59,11 +59,11 @@ pub enum SocketMessage {
 }
 
 
-async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState<'a>>, query: WsQuery) {
-
+async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: WsQuery) {
+    info!("socket 1");
     let (sender, mut receiver) = stream.split();
-
     let sender = Arc::new(Mutex::new(sender));
+    info!("socket 2");
 
     let app_state_orig = app_state.clone();
 
@@ -76,12 +76,14 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState<'a>>, quer
         },
         Ok(_) => {}
     }
+    info!("socket 3");
 
-    let token = token_into_typed(query.token.clone(), app_state_orig.config.env.HASHING_KEY.as_bytes()).unwrap();
+    let token = token_into_typed(query.token.clone(), app_state_orig.config.env.HASHING_KEY.as_bytes().clone()).unwrap();
 
     let p2p_connection = app_state_orig.p2p_connections.lock().await;
     let client_session = p2p_connection.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await;
 
+    info!("socket 4");
 
     let mut client_rx = client_session.user_socket.subscribe();
 
@@ -89,6 +91,7 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState<'a>>, quer
 
     // get online friends at client start/initialization
     let friends = client_session.active_friends.lock().await;
+    info!("socket 5");
 
     let mut online_friends: Vec<String> = vec![];
 
@@ -101,6 +104,7 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState<'a>>, quer
     drop(p2p_connection);
 
 
+    info!("socket 6");
 
 
     let mess = SocketMessage::SocketMessageOnlineUsers(SocketMessageOnlineUsers { online_users: online_friends });
@@ -108,6 +112,7 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState<'a>>, quer
 
     sender.lock().await.send(Message::Text(format!("You joined the channel"))).await.expect("Failed sending joining message");
 
+    info!("socket 7");
 
 
     let msg = format!("{} joined.", token.sub);
@@ -115,6 +120,7 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState<'a>>, quer
     let _ = app_state_orig.broadcast.send(msg);
 
 
+    info!("socket 8");
 
     let mut sender_receive_task = tokio::spawn(async move {
         while let Ok(msg) = client_rx.recv().await {
@@ -129,6 +135,10 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState<'a>>, quer
     // name, and sends them to all broadcast subscribers.
 
     let app_state_clone = app_state.clone();
+    info!("socket 9");
+
+
+    let token = token.clone();
 
     let mut receive_task = tokio::spawn(async move {
         while let Some(Ok(Message::Text(text))) = receiver.next().await {
@@ -137,15 +147,13 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState<'a>>, quer
                 continue;
             }
 
-            let app_state_c = app_state_clone.clone();
-
             // Get fresh connection to get latest state
-            let client_session = &app_state_c.p2p_connections.lock().await.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await.clone();
+            let client_session = app_state_clone.p2p_connections.lock().await.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await.clone();
             let friends = client_session.active_friends.lock().await;
             let recipient = message.recipient.unwrap();
             info!("[name: {}]{} - friends {:?} - {}", token.name, &recipient, friends, friends.len());
 
-            let p2p = &app_state_c.p2p_connections.lock().await;
+            let p2p = app_state_clone.p2p_connections.lock().await;
             let recipient_sessin_manager = p2p.get(&recipient).unwrap().lock().await;
 
             // Send to recipient broadcast
@@ -157,6 +165,8 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState<'a>>, quer
         }
     });
 
+    info!("socket 10");
+
     tokio::select! {
         _ = (&mut receive_task) => {
             sender_receive_task.abort();
@@ -165,4 +175,6 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState<'a>>, quer
             receive_task.abort();
         },
     };
+    info!("socket 11");
+
 }

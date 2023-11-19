@@ -6,15 +6,15 @@ use tokio::sync::broadcast;
 
 use crate::helper::session::SessionManager;
 #[derive(Debug)]
-pub struct AppState<'a> {
+pub struct AppState {
     pub db_pool: r2d2::Pool<r2d2::ConnectionManager<PgConnection>>,
     pub broadcast: broadcast::Sender<String>,
     // Hashmap of currently logged in users
-    pub p2p_connections: Mutex<HashMap<String, Arc<Mutex<SessionManager<'a>>>>>,
+    pub p2p_connections: Mutex<HashMap<String, Arc<Mutex<SessionManager>>>>,
     pub config: ConfigManager
 }
 
-impl<'a> AppState<'a> {
+impl AppState {
     pub fn new(pool: Pool<ConnectionManager<PgConnection>>, config: ConfigManager) -> Self {
         let (tx, _rx) = broadcast::channel(100);
          AppState { db_pool: pool, broadcast: tx, config: config, p2p_connections: Mutex::new(HashMap::new()) }
