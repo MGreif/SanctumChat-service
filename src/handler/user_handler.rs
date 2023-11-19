@@ -87,27 +87,32 @@ pub struct LoginDTO {
 
 pub async fn logout<'a>(State(state): State<Arc<AppState>>, header: HeaderMap) -> impl IntoResponse {
     let token = header.get("authorization");
+    info!("logout 1");
     let token = match token {
         None => {
             return axum::Json(json!({"message": "not logged in"}))
         },
         Some(token) => token_into_typed(token.to_str().unwrap().to_owned().replace("Bearer ", ""), state.config.env.HASHING_KEY.as_bytes()).unwrap()
     };
+    info!("logout 2");
 
-    let mut p2p_connection = state.p2p_connections.lock().await;
-
-    let session_manager = p2p_connection.get(&token.sub).expect("Could not get session manager");
-    session_manager.lock().await.notify_offline().await;
+    let mut p2p = state.p2p_connections.lock().await;
+    info!("logout 3");
+    let session_manager = p2p.get(&token.sub).expect("Could not get session manager");
+    session_manager.lock().await.notify_offline(&p2p).await;
+    info!("logout 4");
 
     // Remove user from logged in sessions
-    let user_tx = p2p_connection.remove_entry(&token.sub);
+    let user_tx = p2p.remove_entry(&token.sub);
+    info!("logout 5");
 
-    let friends = get_friends_in_p2p(&p2p_connection);
+    let friends = get_friends_in_p2p(&p2p);
     
     // Remoe user from currently logged in friends 'active_friends'
     for (_, friend_user_session_manager) in friends {
         friend_user_session_manager.lock().await.remove_friend(&token.sub).await;
     }
+    info!("logout 6");
 
     match user_tx {
         None => {
@@ -158,7 +163,7 @@ pub async fn login<'a>(State(state): State<Arc<AppState>>, Json(body): Json<Logi
 
     let session_manager = prepare_user_session_manager(&user, state.clone()).await;
     update_user_friends(&user, state.clone()).await;
-    
+
     let mut p2p_state = state.p2p_connections.lock().await;
     p2p_state.insert(user.id.clone(), session_manager.to_owned());
 
