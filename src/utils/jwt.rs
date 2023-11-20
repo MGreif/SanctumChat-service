@@ -1,20 +1,21 @@
 use hmac::{Hmac, Mac};
 use jwt::{SignWithKey, VerifyWithKey};
 use sha2::Sha256;
+use uuid::{Uuid, uuid};
 use std::collections::BTreeMap;
 
 use crate::models::UserDTO;
 
 #[derive(Debug, Clone)]
 pub struct Token {
-    pub sub: String,
+    pub sub: Uuid,
     pub name: String
 }
 
 pub fn encrypt_user_token(user: UserDTO, secret_key: &[u8]) -> String {
     let key: Hmac<Sha256> = Hmac::new_from_slice(secret_key).unwrap();
-    let mut claims = BTreeMap::new();
-    claims.insert("sub", user.id);
+    let mut claims: BTreeMap<&str, String> = BTreeMap::new();
+    claims.insert("sub", user.id.to_string());
     claims.insert("name", user.name);
     let token_str = claims.sign_with_key(&key).unwrap();
     token_str
@@ -43,7 +44,9 @@ pub fn token_into_typed(token: String, secret_key: &[u8]) -> Result<Token, Strin
         Ok(res) => res,
     };
 
-    return Ok(Token { sub: claims.get("sub").unwrap().to_owned(), name: claims.get("name").unwrap().to_owned() })
+    let uuid = claims.get("sub").unwrap();
+    let uuid: Uuid = Uuid::parse_str(uuid).unwrap();
+    return Ok(Token { sub: uuid, name: claims.get("name").unwrap().to_owned() })
 }
 
 pub fn hash_string(string: &str, secret_key: &[u8]) -> String {

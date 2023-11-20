@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use axum::{response::Response, middleware::Next, http::{Request, StatusCode, header::{SET_COOKIE, COOKIE}, HeaderMap}, extract::{Query, State}, Extension};
+use axum::{response::Response, middleware::Next, http::{Request, StatusCode, HeaderMap}, extract::{State}, Extension};
 use tracing::info;
 use crate::{config::AppState, utils::jwt::validate_user_token};
 use crate::middlewares::cookies::Cookies;

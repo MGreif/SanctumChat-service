@@ -1,13 +1,14 @@
-use std::{collections::HashMap, sync::Arc, ops::Index};
+use std::{collections::HashMap, sync::Arc};
 
 use futures::lock::Mutex;
 use tracing::info;
+use uuid::Uuid;
 
 use crate::{models::UserDTO, handler::ws_handler::{SocketMessage, SocketMessageStatusChange, EEvent}, config::AppState};
 use tokio::sync::broadcast;
 #[derive(Debug, Clone)]
 pub struct SessionManager {
-    pub active_friends: Arc<Mutex<Vec<String>>>,
+    pub active_friends: Arc<Mutex<Vec<Uuid>>>,
     pub user_socket: broadcast::Sender<SocketMessage>,
     pub user: UserDTO,
     pub app_state: Arc<AppState>
@@ -19,7 +20,10 @@ impl<'a> SessionManager {
     }
 
     pub async fn send_direct_message(&self, message: SocketMessage) {
-        self.user_socket.send(message).expect("Could not send message");
+        match self.user_socket.send(message)  {
+            Err(err) => info!("Error, probably no listeners {}", err),
+            Ok(_) => {}
+        };
     }
     pub async fn notify_online(&self) {
         for friend_id in self.active_friends.lock().await.iter() {
@@ -32,7 +36,7 @@ impl<'a> SessionManager {
         }
     }
 
-    pub async fn notify_offline(&self, p2p_state: &futures::lock::MutexGuard<'_, HashMap<std::string::String, Arc<futures::lock::Mutex<SessionManager>>>>) {
+    pub async fn notify_offline(&self, p2p_state: &futures::lock::MutexGuard<'_, HashMap<Uuid, Arc<futures::lock::Mutex<SessionManager>>>>) {
         for friend_id in self.active_friends.lock().await.iter() {
             let friend_session_manager = p2p_state.get(friend_id).unwrap().lock().await;
             friend_session_manager.send_direct_message(
@@ -41,13 +45,13 @@ impl<'a> SessionManager {
         }
     }
 
-    pub async fn remove_friend(&self, friend_id: &str) {
+    pub async fn remove_friend(&self, friend_id: &Uuid) {
         let mut friends = self.active_friends.lock().await;
-        let index = friends.iter().position(|x| *x == friend_id).unwrap();
+        let index = friends.iter().position(|x| *x == friend_id.to_owned()).unwrap();
         friends.remove(index);
     }
 
-    pub async fn add_friend(&self, friend_id: String) {
+    pub async fn add_friend(&self, friend_id: Uuid) {
         let mut friends = self.active_friends.lock().await;
         friends.push(friend_id);
     }
@@ -56,7 +60,7 @@ impl<'a> SessionManager {
         friend_session_manager.active_friends.lock().await.push(self.user.id.clone());
     }
 
-    pub async fn get_friends(&self) -> futures::lock::MutexGuard<'_, Vec<std::string::String>> {
+    pub async fn get_friends(&self) -> futures::lock::MutexGuard<'_, Vec<Uuid>> {
         self.active_friends.lock().await
     }
 
@@ -74,8 +78,8 @@ impl FriendSessionManager {
     }
 }
 
-pub fn get_friends_in_p2p<'a>(p2p_state: &futures::lock::MutexGuard<'_, HashMap<std::string::String, Arc<futures::lock::Mutex<SessionManager>>>>) -> HashMap<String, Arc<Mutex<SessionManager>>> {
-    let mut friends: HashMap<String, Arc<Mutex<SessionManager>>> = HashMap::new();
+pub fn get_friends_in_p2p<'a>(p2p_state: &futures::lock::MutexGuard<'_, HashMap<Uuid, Arc<futures::lock::Mutex<SessionManager>>>>) -> HashMap<Uuid, Arc<Mutex<SessionManager>>> {
+    let mut friends: HashMap<Uuid, Arc<Mutex<SessionManager>>> = HashMap::new();
     
     // TODO let friends = get_friend_ids_from_db
 

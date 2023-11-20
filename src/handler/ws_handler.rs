@@ -6,6 +6,7 @@ use axum::{
 use futures::{sink::SinkExt, stream::StreamExt, lock::Mutex};
 use serde_json::{from_str, to_string, json};
 use tracing::info;
+use uuid::Uuid;
 use crate::{config::AppState, utils::jwt::{validate_user_token, token_into_typed}};
 
 #[derive(serde::Deserialize)]
@@ -21,8 +22,8 @@ pub async fn ws_handler<'a>(ws: WebSocketUpgrade, State(app_state): State<Arc<Ap
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub struct SocketMessageDirect {
-    pub recipient: Option<String>,
-    pub sender: Option<String>,
+    pub recipient: Option<Uuid>,
+    pub sender: Option<Uuid>,
     pub message: String
 }
 #[derive(Clone, serde::Serialize, serde::Deserialize, Debug)]
@@ -39,13 +40,13 @@ pub struct SocketMessageEvent {
 
 #[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]
 pub struct SocketMessageOnlineUsers {
-    pub online_users: Vec<String>
+    pub online_users: Vec<Uuid>
 }
 
 #[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]
 pub struct SocketMessageStatusChange {
     pub status: EEvent,
-    pub user_id: String
+    pub user_id: Uuid
 }
 
 #[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]
@@ -93,7 +94,7 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
     let friends = client_session.active_friends.lock().await;
     info!("socket 5");
 
-    let mut online_friends: Vec<String> = vec![];
+    let mut online_friends: Vec<Uuid> = vec![];
 
     for friend_id in friends.iter() {
         online_friends.push(friend_id.to_owned());

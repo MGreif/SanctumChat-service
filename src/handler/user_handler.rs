@@ -1,24 +1,12 @@
 use std::sync::Arc;
 use axum::{extract::{Json, Query, State}, response::IntoResponse, http::{HeaderMap, header::{SET_COOKIE, self}, StatusCode}};
 use tracing::info;
+use uuid::Uuid;
 use crate::{schema::users::dsl::*, helper::session::get_friends_in_p2p};
 use serde_json::json;
 use crate::{config::AppState, models::{UserDTO, self}, schema::{self, users::{self, all_columns}}, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR, utils::jwt::{hash_string, validate_user_token, token_into_typed}, helper::session::{prepare_user_session_manager, update_user_friends}};
-use diesel::prelude::*;
-use rand::{thread_rng, Rng, distributions::Alphanumeric};
+use diesel::{prelude::*};
 use crate::utils::jwt::encrypt_user_token;
-
-fn generate_random_string(length: usize) -> String {
-    let rng = thread_rng();
-
-    let random_string: String = rng
-        .sample_iter(&Alphanumeric)
-        .take(length)
-        .map(char::from)
-        .collect();
-
-    random_string
-}
 
 #[derive(serde::Deserialize)]
 pub struct UserCreateDTO {
@@ -48,7 +36,7 @@ pub async fn get_users<'a>(State(state): State<Arc<AppState>>, Query(query_param
 pub async fn create_user<'a>(State(state): State<Arc<AppState>>, Json(body): Json<UserCreateDTO>) -> impl IntoResponse {
     let mut db_conn = state.db_pool.get().expect("could not get database pool");
     let mut new_user = models::UserDTO { 
-        id: generate_random_string(10),
+        id: Uuid::new_v4(),
         age: body.age,
         name: body.name,
         password: body.password
@@ -98,28 +86,30 @@ pub async fn logout<'a>(State(state): State<Arc<AppState>>, header: HeaderMap) -
 
     let mut p2p = state.p2p_connections.lock().await;
     info!("logout 3");
-    let session_manager = p2p.get(&token.sub).expect("Could not get session manager");
-    session_manager.lock().await.notify_offline(&p2p).await;
-    info!("logout 4");
-
-    // Remove user from logged in sessions
-    let user_tx = p2p.remove_entry(&token.sub);
-    info!("logout 5");
-
-    let friends = get_friends_in_p2p(&p2p);
-    
-    // Remoe user from currently logged in friends 'active_friends'
-    for (_, friend_user_session_manager) in friends {
-        friend_user_session_manager.lock().await.remove_friend(&token.sub).await;
-    }
-    info!("logout 6");
-
-    match user_tx {
+    let (user_id, session_manager) = match p2p.remove_entry(&token.sub) {
         None => {
             return axum::Json(json!({"message": "user not p2p pool"}))
         },
-        Some(_) => {},
+        Some(user) => user,
     };
+
+    info!("logout 4");
+
+    session_manager.lock().await.notify_offline(&p2p).await;
+
+    // Remove user from logged in sessions
+
+    info!("logout 5");
+
+    let friends = get_friends_in_p2p(&p2p);
+    info!("Online friends {:?} {}" , friends, friends.len());
+    // Remoe user from currently logged in friends 'active_friends'
+    for (_, friend_user_session_manager) in friends {
+        friend_user_session_manager.lock().await.remove_friend(&user_id).await;
+    }
+    info!("logout 6");
+
+
 
     axum::Json(json!({"message": "logged out"}))
 }
@@ -148,12 +138,12 @@ pub async fn login<'a>(State(state): State<Arc<AppState>>, Json(body): Json<Logi
 
 
     let mut pool = state.db_pool.get().expect("Could not establish pool connection");
-    let user_result: Result<(String, i32, String, String ), _> = users
+    let user_result: Result<(String, i32, Uuid, String ), _> = users
         .select(users::all_columns)
         .filter(name
             .eq(&username)
             .and(password.eq(hash_string(&pw, state.config.env.HASHING_KEY.clone().as_bytes()))))
-        .first::<(String, i32, String, String )>(&mut pool);
+        .first::<(String, i32, Uuid, String )>(&mut pool);
 
     let user = match user_result {
         Err(_) => return (headers, axum::Json(json!({"message": "login failed, wrong username or password"}))),
