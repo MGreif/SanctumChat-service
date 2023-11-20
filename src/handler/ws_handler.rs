@@ -1,13 +1,17 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::SystemTime};
 
 use axum::{
     extract::{ws::{WebSocketUpgrade, WebSocket, Message}, State, Query}, response::Response,
 };
 use futures::{sink::SinkExt, stream::StreamExt, lock::Mutex};
-use serde_json::{from_str, to_string, json};
+use serde_json::{from_str, to_string};
 use tracing::info;
 use uuid::Uuid;
-use crate::{config::AppState, utils::jwt::{validate_user_token, token_into_typed}};
+use crate::{config::AppState, utils::jwt::{validate_user_token, token_into_typed}, models};
+
+
+use crate::schema::messages::dsl::messages;
+use diesel::prelude::*;
 
 #[derive(serde::Deserialize)]
 pub struct WsQuery {
@@ -157,12 +161,25 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
             let p2p = app_state_clone.p2p_connections.lock().await;
             let recipient_sessin_manager = p2p.get(&recipient).unwrap().lock().await;
 
+            let message = SocketMessageDirect { sender: Some(token.sub.clone()), recipient: Some(recipient.clone()), message: message.message.clone() };
             // Send to recipient broadcast
-            recipient_sessin_manager.send_direct_message(SocketMessage::SocketMessageDirect(SocketMessageDirect { sender: Some(token.sub.clone()), recipient: Some(recipient.clone()), message: message.message.clone() })).await;
+            recipient_sessin_manager.send_direct_message(SocketMessage::SocketMessageDirect(message.clone())).await;
             
             // Send back to client broadcast to reflect for sender
-            client_session.send_direct_message(SocketMessage::SocketMessageDirect(SocketMessageDirect { sender: Some(token.sub.clone()), recipient: Some(recipient), message: message.message.clone() })).await; 
+            client_session.send_direct_message(SocketMessage::SocketMessageDirect(message.clone())).await; 
             
+            // Save message in db
+            let message = models::Message {
+                content: message.message,
+                id: Uuid::new_v4(),
+                recipient,
+                sender: token.sub.clone(),
+                sent_at: SystemTime::now()
+            };
+
+            let mut pool = app_state_clone.db_pool.get().expect("Could not get db connection to db to save sent message");
+            diesel::insert_into(messages).values(&message).execute(&mut pool).expect(format!("Could not save message {:?}", &message).as_str());
+
         }
     });
 

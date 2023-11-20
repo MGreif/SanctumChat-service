@@ -5,7 +5,9 @@ diesel::table! {
         id -> Uuid,
         sender -> Uuid,
         recipient -> Uuid,
-        sent_at -> Date,
+        sent_at -> Timestamp,
+        #[max_length = 500]
+        content -> Varchar,
     }
 }
 

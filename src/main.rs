@@ -15,7 +15,7 @@ use diesel::prelude::*;
 mod config;
 mod handler;
 mod validation;
-use handler::user_handler;
+use handler::{user_handler, message_handler};
 mod middlewares;
 mod utils;
 mod helper;
@@ -24,10 +24,6 @@ fn get_connection_pool(env_config: EnvConfig) -> Pool<ConnectionManager<PgConnec
     let manager = ConnectionManager::<PgConnection>::new(env_config.DATABASE_URL);
     let pool = Pool::new(manager).expect("Failed to create connection pool");
     pool
-}
-
-fn get_app_state<'a>(pool: Pool<ConnectionManager<PgConnection>>, config: ConfigManager) -> AppState {
-    AppState::new(pool, config)
 }
 
 #[tokio::main]
@@ -51,7 +47,7 @@ async fn main() {
         .route_layer(middleware::from_fn_with_state(app_state.clone(), middlewares::auth::authBearer))
         .route("/token", post( user_handler::token))
         .route("/users", get(user_handler::get_users).post(user_handler::create_user))
-
+        .route("/messages", get(message_handler::get_messages))
         .route("/login", post( user_handler::login))
         .route("/ws", get(handler::ws_handler::ws_handler))
         .route_layer(middleware::from_fn(middlewares::cookies::cookie_mw))

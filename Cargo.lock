@@ -1372,7 +1372,6 @@ dependencies = [
  "jwt",
  "proc-macro2",
  "quote",
- "rand",
  "serde",
  "serde_json",
  "sha2",
