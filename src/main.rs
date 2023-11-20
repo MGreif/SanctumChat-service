@@ -44,10 +44,10 @@ async fn main() {
 
     let app = Router::new()
         .route("/logout", post(user_handler::logout))
+        .route("/messages", get(message_handler::get_messages))
         .route_layer(middleware::from_fn_with_state(app_state.clone(), middlewares::auth::authBearer))
         .route("/token", post( user_handler::token))
         .route("/users", get(user_handler::get_users).post(user_handler::create_user))
-        .route("/messages", get(message_handler::get_messages))
         .route("/login", post( user_handler::login))
         .route("/ws", get(handler::ws_handler::ws_handler))
         .route_layer(middleware::from_fn(middlewares::cookies::cookie_mw))
