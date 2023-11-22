@@ -138,16 +138,16 @@ pub async fn login<'a>(State(state): State<Arc<AppState>>, Json(body): Json<Logi
 
 
     let mut pool = state.db_pool.get().expect("Could not establish pool connection");
-    let user_result: Result<(String, i32, Uuid, String ), _> = users
+    let user_result: Result<(Uuid, String, i32, String ), _> = users
         .select(users::all_columns)
         .filter(name
             .eq(&username)
             .and(password.eq(hash_string(&pw, state.config.env.HASHING_KEY.clone().as_bytes()))))
-        .first::<(String, i32, Uuid, String )>(&mut pool);
+        .first::<(Uuid, String, i32, String )>(&mut pool);
 
     let user = match user_result {
         Err(_) => return (headers, axum::Json(json!({"message": "login failed, wrong username or password"}))),
-        Ok(result_id) => UserDTO { name: result_id.0, age: result_id.1, id: result_id.2, password: result_id.3 } 
+        Ok(result_id) => UserDTO { id: result_id.0, name: result_id.1, age: result_id.2, password: result_id.3 } 
     };
 
 

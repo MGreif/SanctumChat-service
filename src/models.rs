@@ -7,9 +7,9 @@ use uuid::Uuid;
 #[diesel(table_name = crate::schema::users)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct UserDTO {
+    pub id: Uuid,
     pub name: String,
     pub age: i32,
-    pub id: Uuid,
     pub password: String
 }
 

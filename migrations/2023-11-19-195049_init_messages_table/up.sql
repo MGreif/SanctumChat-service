@@ -1,6 +1,6 @@
 -- Your SQL goes here
 CREATE TABLE IF NOT EXISTS messages (
-  id UUID NOT NULL,
+  id UUID NOT NULL  DEFAULT uuid_generate_v4(),
   sender UUID NOT NULL,
   recipient UUID NOT NULL,
   sent_at timestamp NOT NULL,
