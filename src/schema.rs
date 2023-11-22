@@ -12,8 +12,8 @@ diesel::table! {
 diesel::table! {
     friends (id) {
         id -> Uuid,
-        user_a -> Uuid,
-        user_b -> Uuid,
+        user_id -> Uuid,
+        befriended_user_id -> Uuid,
     }
 }
 

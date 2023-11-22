@@ -13,17 +13,16 @@ CREATE TABLE IF NOT EXISTS friend_requests (
 CREATE TABLE IF NOT EXISTS friends (
 	id UUID NOT NULL DEFAULT uuid_generate_v4(),
 	PRIMARY KEY(id),
-	user_a UUID NOT NULL,
-	user_b UUID NOT NULL,
-	CONSTRAINT fk_user_a FOREIGN KEY(user_a) REFERENCES users(id),
-	CONSTRAINT fk_user_b FOREIGN KEY(user_b) REFERENCES users(id)
+	user_id UUID NOT NULL,
+	befriended_user_id UUID NOT NULL,
+	CONSTRAINT fk_user FOREIGN KEY(user_id) REFERENCES users(id),
+	CONSTRAINT fk_befriended_user_id FOREIGN KEY(befriended_user_id) REFERENCES users(id)
 );
 
 CREATE OR REPLACE FUNCTION add_friends() RETURNS trigger AS $add_friends$
     BEGIN
         IF NEW.accepted IS true THEN
-            INSERT INTO friends(user_a, user_b) values(NEW.sender, NEW.recipient);
-            RETURN NEW;
+            INSERT INTO friends(user_id, befriended_user_id) values(NEW.sender, NEW.recipient), (NEW.recipient, NEW.sender);
         END IF;
         RETURN NULL;
     END;
