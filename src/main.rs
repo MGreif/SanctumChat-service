@@ -8,6 +8,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use axum::routing::patch;
 use tracing;
 mod models;
 mod schema;
@@ -15,7 +16,9 @@ use diesel::prelude::*;
 mod config;
 mod handler;
 mod validation;
-use handler::{user_handler, message_handler};
+use handler::{user_handler, message_handler, friend_handler};
+use crate::schema::friends::dsl::friends;
+
 mod middlewares;
 mod utils;
 mod helper;
@@ -45,13 +48,16 @@ async fn main() {
     let app = Router::new()
         .route("/logout", post(user_handler::logout))
         .route("/messages", get(message_handler::get_messages))
+        .route("/friends", get(friend_handler::get_friends))
+        .route("/friend-requests", get(friend_handler::get_friend_requests).post(friend_handler::create_friend_request))
+        .route("/friend-requests/:uuid", patch(friend_handler::patch_friend_request))
         .route_layer(middleware::from_fn_with_state(app_state.clone(), middlewares::auth::authBearer))
+        .route_layer(middleware::from_fn_with_state(app_state.clone(), middlewares::token::token_mw))
         .route("/token", post( user_handler::token))
         .route("/users", get(user_handler::get_users).post(user_handler::create_user))
         .route("/login", post( user_handler::login))
         .route("/ws", get(handler::ws_handler::ws_handler))
         .route_layer(middleware::from_fn(middlewares::cookies::cookie_mw))
-        .route_layer(middleware::from_fn_with_state(app_state.clone(), middlewares::token::token_mw))
         .layer(cors)
         .with_state(app_state)
         .with_state(config.clone());

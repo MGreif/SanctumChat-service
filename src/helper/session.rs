@@ -3,9 +3,11 @@ use std::{collections::HashMap, sync::Arc};
 use futures::lock::Mutex;
 use tracing::info;
 use uuid::Uuid;
-
+use diesel::prelude::*;
 use crate::{models::UserDTO, handler::ws_handler::{SocketMessage, SocketMessageStatusChange, EEvent}, config::AppState};
 use tokio::sync::broadcast;
+use crate::helper::sql::get_friends_for_user_from_db;
+
 #[derive(Debug, Clone)]
 pub struct SessionManager {
     pub active_friends: Arc<Mutex<Vec<Uuid>>>,
@@ -78,22 +80,24 @@ impl FriendSessionManager {
     }
 }
 
-pub fn get_friends_in_p2p<'a>(p2p_state: &futures::lock::MutexGuard<'_, HashMap<Uuid, Arc<futures::lock::Mutex<SessionManager>>>>) -> HashMap<Uuid, Arc<Mutex<SessionManager>>> {
+pub async fn get_friends_in_p2p<'a>(app_state: Arc<AppState>, client_uuid: Uuid) -> HashMap<Uuid, Arc<Mutex<SessionManager>>> {
+    let mut pool = app_state.db_pool.get().expect("[get_friends] Could not get connection pool");
+    let friends_from_db = get_friends_for_user_from_db(& mut pool, client_uuid).await;
     let mut friends: HashMap<Uuid, Arc<Mutex<SessionManager>>> = HashMap::new();
-    
-    // TODO let friends = get_friend_ids_from_db
-
-    // TODO iterate through friends and push friends session manager into vec
-
-    // TODO: Iterate through friends
-    // Check if friend is in p2p_state
-    // If yes, Append self as FriendSessionManager to friends 'friends'
-    // If not, friend is offline and not connected
-    // Currently not need because im getting friends directrly from p2p_state
-
+    info!("FRIENDS {:?}", friends_from_db);
+    let p2p_connections = app_state.p2p_connections.lock().await;
+    info!("{:?}", p2p_connections);
     // Currently just iterating over entire p2p_state
-    for (user_id, session_manager) in p2p_state.iter() {
-        friends.insert(user_id.to_owned(),session_manager.to_owned());
+    for (user) in friends_from_db.iter() {
+
+        // Get sessionmanager from p2p pool
+
+        let session_manager = match p2p_connections.get(&user.id) {
+            Some(sm) => sm,
+            None => continue
+        };
+        info!("FRIEND WITH SESSION MANAGER {}", user.name);
+        friends.insert(user.id,session_manager.to_owned());
     }
 
     friends
@@ -102,8 +106,7 @@ pub fn get_friends_in_p2p<'a>(p2p_state: &futures::lock::MutexGuard<'_, HashMap<
 
 
 pub async fn update_user_friends<'a>(user: &UserDTO, app_state: Arc<AppState>) {
-    let p2p_state = app_state.p2p_connections.lock().await;
-    let friends_in_p2p_state = get_friends_in_p2p(&p2p_state); // This has to be exchanged with an iteration and filtering only the p2p_connections that are the friends
+    let friends_in_p2p_state = get_friends_in_p2p(app_state.clone(), user.id).await; // This has to be exchanged with an iteration and filtering only the p2p_connections that are the friends
 
     for (friend_id, friend_session_manager) in friends_in_p2p_state.iter() {
         if friend_id == &user.id {
@@ -112,7 +115,13 @@ pub async fn update_user_friends<'a>(user: &UserDTO, app_state: Arc<AppState>) {
 
         // Insert self into friends of friends session manager
         let friend_session = friend_session_manager.lock().await;
-        friend_session.active_friends.lock().await.push(user.id.clone());
+        let mut active_friends = friend_session.active_friends.lock().await;
+        let index = active_friends.iter().position(|&r| r == user.id);
+
+        match index {
+            None => { active_friends.push(user.id.clone()) },
+            Some(_) => {},
+        };
     }
 }
 
@@ -121,11 +130,9 @@ pub async fn prepare_user_session_manager<'a>(user: &UserDTO, app_state: Arc<App
     // Currently only getting other active users, because 'friends' is not implemented yet
     info!("prepare 0");
     let app_state = app_state.clone();
-    let p2p_state = app_state.p2p_connections.lock().await;
     info!("prepare 0.5");
-    let friends_in_p2p_state = get_friends_in_p2p(&p2p_state); // This has to be exchanged with an iteration and filtering only the p2p_connections that are the friends
+    let friends_in_p2p_state = get_friends_in_p2p(app_state.clone(), user.id).await; // This has to be exchanged with an iteration and filtering only the p2p_connections that are the friends
     info!("prepare 1");
-    drop(p2p_state);
     let self_session_manager = Arc::new(Mutex::new(SessionManager::new(user.clone(), app_state.clone())));
     info!("prepare 2");
 
@@ -137,7 +144,11 @@ pub async fn prepare_user_session_manager<'a>(user: &UserDTO, app_state: Arc<App
         // Insert friends into self-session currently online friends
         let self_session_manager = self_session_manager.lock().await;
         let mut self_friends = self_session_manager.active_friends.lock().await;
-        self_friends.push(friend_id.to_owned());
+        match self_friends.iter().position(|&r| r == friend_id.to_owned()) {
+            None => self_friends.push(friend_id.to_owned()),
+            Some(_) => {}
+        };
+
 
         drop(self_friends);
         drop(self_session_manager);
@@ -147,7 +158,6 @@ pub async fn prepare_user_session_manager<'a>(user: &UserDTO, app_state: Arc<App
 
 
     let self_session_manager_locked = self_session_manager.lock().await;
-    info!("{:?} {:?} {:?}", user, self_session_manager_locked, friends_in_p2p_state);
     info!("prepare 4");
 
     self_session_manager_locked.notify_online().await;

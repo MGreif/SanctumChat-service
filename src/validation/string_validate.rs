@@ -2,7 +2,6 @@ pub struct StringValidator {
     pub min_length: u16,
     pub max_length: Option<u16>
 }
-
 impl StringValidator {
     pub fn new(min_length: u16, max_length: Option<u16>) -> StringValidator {
         StringValidator { min_length, max_length }
@@ -18,6 +17,27 @@ impl StringValidator {
             if length > max {
                 return Err(String::from("Too long"))
             }
+        }
+
+        Ok(())
+    }
+}
+
+
+pub struct UuidValidator {
+
+}
+
+impl UuidValidator {
+    pub fn new() -> UuidValidator {
+        UuidValidator {  }
+    }
+
+    pub fn validate(&self, value: &str) -> Result<(), String> {
+        let length = value.len() as u16;
+
+        if length != 36 {
+            return Err(String::from("Field is not in a uuid format (36 chars)")) // Todo use regex
         }
 
         Ok(())

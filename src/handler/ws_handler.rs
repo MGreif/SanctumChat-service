@@ -159,7 +159,7 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
             info!("[name: {}]{} - friends {:?} - {}", token.name, &recipient, friends, friends.len());
 
             let p2p = app_state_clone.p2p_connections.lock().await;
-            let recipient_sessin_manager = p2p.get(&recipient).unwrap().lock().await;
+            let recipient_sessin_manager = p2p.get(&recipient).unwrap().lock().await; // TODO Remove unwrap. Handle when recipient is not online
 
             let message = SocketMessageDirect { sender: Some(token.sub.clone()), recipient: Some(recipient.clone()), message: message.message.clone() };
             // Send to recipient broadcast

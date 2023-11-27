@@ -1,13 +1,13 @@
 use std::time::SystemTime;
 
-use diesel::{Queryable, backend::Backend, deserialize::FromSql, pg::Pg, associations::{Identifiable, Associations}, alias};
+use diesel::{Queryable, backend::Backend, deserialize::FromSql, pg::Pg, associations::{Identifiable, Associations}, alias, QueryableByName};
 use uuid::Uuid;
 
 use crate::schema::{friends, self};
 
 alias!(schema::users as users_alias: UserAliasDTO);
 
-#[derive(Debug, serde::Deserialize, serde::Serialize, diesel::Queryable, diesel::Selectable, diesel::Insertable, Clone, Identifiable)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, diesel::Queryable, diesel::Selectable, diesel::Insertable, Clone, Identifiable, QueryableByName)]
 #[diesel(table_name = crate::schema::users)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct UserDTO {
@@ -41,9 +41,13 @@ pub struct Friend {
     pub befriended_user_id: Uuid,
 }
 
-#[derive(Debug, serde::Deserialize, serde::Serialize, diesel::Queryable, diesel::Selectable, diesel::Insertable, Clone)]
+diesel::joinable!(crate::schema::friend_requests -> crate::schema::users (id));
+#[derive(Debug, serde::Deserialize, serde::Serialize, diesel::Queryable, diesel::Selectable, diesel::Insertable, Clone, Identifiable, Associations, QueryableByName)]
 #[diesel(table_name = crate::schema::friend_requests)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
+#[diesel(belongs_to(UserDTO, foreign_key = sender))]
+#[diesel(belongs_to(UserAliasDTO, foreign_key = recipient))]
+#[diesel(primary_key(sender, recipient))]
 pub struct FriendRequest {
     pub id: Uuid,
     pub sender: Uuid,

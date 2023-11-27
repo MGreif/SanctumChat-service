@@ -1,14 +1,15 @@
 use axum::{response::IntoResponse, http::StatusCode};
+use serde::Serialize;
 use serde_json::json;
 
 #[derive(Clone)]
-pub struct HTTPResponse<G = ()> {
+pub struct HTTPResponse<G: Serialize> {
     pub message: Option<String>,
     pub status: StatusCode,
-    pub data: G
+    pub data: Option<G>
 }
 
-impl IntoResponse for HTTPResponse {
+impl<T: Serialize> IntoResponse for HTTPResponse<T> {
     fn into_response(self) -> axum::response::Response {
         let body = axum::Json(json!({"message": self.message, "data": self.data}));
         (self.status, body).into_response()

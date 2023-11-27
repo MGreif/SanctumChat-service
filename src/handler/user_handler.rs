@@ -96,13 +96,12 @@ pub async fn logout<'a>(State(state): State<Arc<AppState>>, header: HeaderMap) -
     info!("logout 4");
 
     session_manager.lock().await.notify_offline(&p2p).await;
-
+    drop(p2p);
     // Remove user from logged in sessions
 
     info!("logout 5");
 
-    let friends = get_friends_in_p2p(&p2p);
-    info!("Online friends {:?} {}" , friends, friends.len());
+    let friends = get_friends_in_p2p(state.clone(), token.sub).await;
     // Remoe user from currently logged in friends 'active_friends'
     for (_, friend_user_session_manager) in friends {
         friend_user_session_manager.lock().await.remove_friend(&user_id).await;

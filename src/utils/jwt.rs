@@ -3,10 +3,11 @@ use jwt::{SignWithKey, VerifyWithKey};
 use sha2::Sha256;
 use uuid::{Uuid, uuid};
 use std::collections::BTreeMap;
+use serde::{Deserialize, Serialize};
 
 use crate::models::UserDTO;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Token {
     pub sub: Uuid,
     pub name: String
