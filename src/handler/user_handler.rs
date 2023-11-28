@@ -16,7 +16,8 @@ pub struct UserCreateDTO {
     pub name: String,
     pub age: i32,
     pub username: String,
-    password: String
+    password: String,
+    pub public_key: String
 }
 
 #[derive(serde::Deserialize)]
@@ -39,14 +40,9 @@ pub async fn get_users<'a>(State(state): State<Arc<AppState>>, Query(query_param
 
 pub async fn create_user<'a>(State(state): State<Arc<AppState>>, Json(body): Json<UserCreateDTO>) -> impl IntoResponse {
     let mut db_conn = state.db_pool.get().expect("could not get database pool");
-    let mut new_user = models::UserDTO { 
-        username: body.username,
-        age: body.age,
-        name: body.name,
-        password: body.password
-    };
 
-    match DEFAULT_INPUT_FIELD_STRING_VALIDATOR.validate(&new_user.username) {
+
+    match DEFAULT_INPUT_FIELD_STRING_VALIDATOR.validate(&body.username) {
         Err(err) => {
             return HTTPResponse::<UserDTO> {
                 message: Some(format!("Username validation failed: {}", err)),
@@ -56,7 +52,7 @@ pub async fn create_user<'a>(State(state): State<Arc<AppState>>, Json(body): Jso
         },
         Ok(_) => {}
     }
-    match DEFAULT_INPUT_FIELD_STRING_VALIDATOR.validate(&new_user.name) {
+    match DEFAULT_INPUT_FIELD_STRING_VALIDATOR.validate(&body.name) {
         Err(err) => {
             return HTTPResponse::<UserDTO> {
                 message: Some(format!("Password validation failed: {}", err)),
@@ -66,7 +62,7 @@ pub async fn create_user<'a>(State(state): State<Arc<AppState>>, Json(body): Jso
         },
         Ok(_) => {}
     }
-    match DEFAULT_INPUT_FIELD_STRING_VALIDATOR.validate(&new_user.password) {
+    match DEFAULT_INPUT_FIELD_STRING_VALIDATOR.validate(&body.password) {
         Err(err) => {
             return HTTPResponse::<UserDTO> {
                 message: Some(format!("Password validation failed: {}", err)),
@@ -76,6 +72,14 @@ pub async fn create_user<'a>(State(state): State<Arc<AppState>>, Json(body): Jso
         },
         Ok(_) => {}
     }
+
+    let mut new_user = models::UserDTO {
+        username: body.username,
+        age: body.age,
+        name: body.name,
+        password: body.password,
+        public_key: body.public_key.as_bytes().to_vec()
+    };
 
     let mut query = diesel::sql_query("SELECT COUNT(*) FROM users WHERE username = $1").bind::<Text, _>(&new_user.username).load::<Count>(&mut db_conn).expect("Could not get user count");
     let count = match query.pop() {
@@ -177,16 +181,16 @@ pub async fn login<'a>(State(state): State<Arc<AppState>>, Json(body): Json<Logi
 
 
     let mut pool = state.db_pool.get().expect("Could not establish pool connection");
-    let user_result: Result<(String, String, i32, String ), _> = users
+    let user_result: Result<(String, String, i32, String, Vec<u8> ), _> = users
         .select(users::all_columns)
         .filter(username
             .eq(&username_id)
             .and(password.eq(hash_string(&pw, state.config.env.HASHING_KEY.clone().as_bytes()))))
-        .first::<(String, String, i32, String )>(&mut pool);
+        .first::<(String, String, i32, String, Vec<u8> )>(&mut pool);
 
     let user = match user_result {
         Err(_) => return (headers, axum::Json(json!({"message": "login failed, wrong username or password"}))),
-        Ok(result_id) => UserDTO { username: result_id.0, name: result_id.1, age: result_id.2, password: result_id.3 }
+        Ok(result_id) => UserDTO { username: result_id.0, name: result_id.1, age: result_id.2, password: result_id.3, public_key: result_id.4 }
     };
 
 
@@ -227,7 +231,10 @@ pub async fn token<'a>(State(app_state): State<Arc<AppState>>, headers: HeaderMa
     info!("token 3");
 
     let mut pool = app_state.db_pool.get().expect("Could not get db pool");
-    let user: UserDTO = users.select(all_columns).filter(username.eq(&token.sub)).first(&mut pool).expect("Could not get user");
+    let user: UserDTO = match users.select(all_columns).filter(username.eq(&token.sub)).first(&mut pool) {
+        Ok(user) => user,
+        Err(_) => return (StatusCode::FORBIDDEN, axum::Json::from(json!({"message": "Could not get user"})).to_string())
+    };
     info!("token 3.5");
 
     info!("token 4");

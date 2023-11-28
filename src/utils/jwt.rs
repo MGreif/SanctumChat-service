@@ -10,7 +10,8 @@ use crate::models::UserDTO;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Token {
     pub sub: String,
-    pub name: String
+    pub name: String,
+    pub public_key: String
 }
 
 pub fn encrypt_user_token(user: UserDTO, secret_key: &[u8]) -> String {
@@ -18,6 +19,8 @@ pub fn encrypt_user_token(user: UserDTO, secret_key: &[u8]) -> String {
     let mut claims: BTreeMap<&str, String> = BTreeMap::new();
     claims.insert("sub", user.username.to_string());
     claims.insert("name", user.name);
+    let public_key_base64 = String::from_utf8(user.public_key).expect("Could not parse public_key"); // Converting to string
+    claims.insert("public_key", public_key_base64);
     let token_str = claims.sign_with_key(&key).unwrap();
     token_str
 }
@@ -46,7 +49,7 @@ pub fn token_into_typed(token: String, secret_key: &[u8]) -> Result<Token, Strin
     };
 
     let uuid = claims.get("sub").unwrap();
-    return Ok(Token { sub: uuid.to_owned(), name: claims.get("name").unwrap().to_owned() })
+    return Ok(Token { sub: uuid.to_owned(), name: claims.get("name").unwrap().to_owned(), public_key: claims.get("public_key").unwrap().to_owned() })
 }
 
 pub fn hash_string(string: &str, secret_key: &[u8]) -> String {

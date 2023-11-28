@@ -29,8 +29,10 @@ diesel::table! {
         #[max_length = 30]
         recipient -> Varchar,
         sent_at -> Timestamp,
-        #[max_length = 500]
+        #[max_length = 1000]
         content -> Varchar,
+        #[max_length = 1000]
+        content_self_encrypted -> Varchar,
     }
 }
 
@@ -43,6 +45,7 @@ diesel::table! {
         age -> Int4,
         #[max_length = 64]
         password -> Varchar,
+        public_key -> Bytea,
     }
 }
 

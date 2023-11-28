@@ -28,7 +28,8 @@ pub async fn ws_handler<'a>(ws: WebSocketUpgrade, State(app_state): State<Arc<Ap
 pub struct SocketMessageDirect {
     pub recipient: Option<String>,
     pub sender: Option<String>,
-    pub message: String
+    pub message: String,
+    pub message_self_encrypted: String
 }
 #[derive(Clone, serde::Serialize, serde::Deserialize, Debug)]
 
@@ -158,11 +159,12 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
             let recipient = message.recipient.unwrap();
             info!("[name: {}]{} - friends {:?} - {}", token.name, &recipient, friends, friends.len());
 
-            let message = SocketMessageDirect { sender: Some(token.sub.clone()), recipient: Some(recipient.clone()), message: message.message.clone() };
-
+            let message = SocketMessageDirect { sender: Some(token.sub.clone()), recipient: Some(recipient.clone()), message: message.message.clone(), message_self_encrypted: message.message_self_encrypted.clone() };
+            let message_clone = message.clone();
             // Save message in db
             let message_db = models::Message {
-                content: message.clone().message,
+                content: message_clone.message,
+                content_self_encrypted: message_clone.message_self_encrypted,
                 id: Uuid::new_v4(),
                 recipient: recipient.clone(),
                 sender: token.sub.clone(),

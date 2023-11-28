@@ -7,5 +7,6 @@ CREATE TABLE users (
   name varchar(50) NOT NULL,
   age int NOT NULL,
   password varchar(64) NOT NULL,
+  public_key BYTEA NOT NULL,
   PRIMARY KEY(username)
 )

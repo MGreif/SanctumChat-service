@@ -14,7 +14,8 @@ pub struct UserDTO {
     pub username: String,
     pub name: String,
     pub age: i32,
-    pub password: String
+    pub password: String,
+    pub public_key: Vec<u8>
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize, diesel::Queryable, diesel::Selectable, diesel::Insertable, Clone)]
@@ -26,6 +27,7 @@ pub struct Message {
     pub recipient: String,
     pub sent_at: SystemTime,
     pub content: String,
+    pub content_self_encrypted: String,
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize, diesel::Queryable, diesel::Selectable, diesel::Insertable, Clone)]
