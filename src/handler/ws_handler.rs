@@ -158,28 +158,33 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
             let recipient = message.recipient.unwrap();
             info!("[name: {}]{} - friends {:?} - {}", token.name, &recipient, friends, friends.len());
 
-            let p2p = app_state_clone.p2p_connections.lock().await;
-            let recipient_sessin_manager = p2p.get(&recipient).unwrap().lock().await; // TODO Remove unwrap. Handle when recipient is not online
-
             let message = SocketMessageDirect { sender: Some(token.sub.clone()), recipient: Some(recipient.clone()), message: message.message.clone() };
-            // Send to recipient broadcast
-            recipient_sessin_manager.send_direct_message(SocketMessage::SocketMessageDirect(message.clone())).await;
-            
-            // Send back to client broadcast to reflect for sender
-            client_session.send_direct_message(SocketMessage::SocketMessageDirect(message.clone())).await; 
-            
+
             // Save message in db
-            let message = models::Message {
-                content: message.message,
+            let message_db = models::Message {
+                content: message.clone().message,
                 id: Uuid::new_v4(),
-                recipient,
+                recipient: recipient.clone(),
                 sender: token.sub.clone(),
                 sent_at: SystemTime::now()
             };
 
-            let mut pool = app_state_clone.db_pool.get().expect("Could not get db connection to db to save sent message");
-            diesel::insert_into(messages).values(&message).execute(&mut pool).expect(format!("Could not save message {:?}", &message).as_str());
 
+            let mut pool = app_state_clone.db_pool.get().expect("Could not get db connection to db to save sent message");
+            diesel::insert_into(messages).values(&message_db).execute(&mut pool).expect(format!("Could not save message {:?}", &message_db).as_str());
+
+            client_session.send_direct_message(SocketMessage::SocketMessageDirect(message.clone())).await;
+
+            let p2p = app_state_clone.p2p_connections.lock().await;
+            let recipient_session_manager = p2p.get(&recipient);
+
+            match recipient_session_manager {
+                None => {},
+                Some(sm) => {
+                    sm.lock().await.send_direct_message(SocketMessage::SocketMessageDirect(message.clone())).await
+
+                }
+            }
         }
     });
 
