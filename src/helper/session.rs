@@ -126,12 +126,8 @@ pub async fn update_user_friends<'a>(user: &UserDTO, app_state: Arc<AppState>) {
 }
 
 pub async fn prepare_user_session_manager<'a>(user: &UserDTO, app_state: Arc<AppState>) -> Arc<Mutex<SessionManager>> {
-    // get friends from some source
-    // Currently only getting other active users, because 'friends' is not implemented yet
-    info!("prepare 0");
-    let app_state = app_state.clone();
     info!("prepare 0.5");
-    let friends_in_p2p_state = get_friends_in_p2p(app_state.clone(), user.id).await; // This has to be exchanged with an iteration and filtering only the p2p_connections that are the friends
+    let friends_in_p2p_state = get_friends_in_p2p(app_state.clone(), user.id).await;
     info!("prepare 1");
     let self_session_manager = Arc::new(Mutex::new(SessionManager::new(user.clone(), app_state.clone())));
     info!("prepare 2");
@@ -166,5 +162,4 @@ pub async fn prepare_user_session_manager<'a>(user: &UserDTO, app_state: Arc<App
     info!("{} has {:?} online friends", user.name, self_session_manager_locked.active_friends.lock().await.len());
     drop(self_session_manager_locked);
     self_session_manager.to_owned()
-
 }

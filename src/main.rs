@@ -37,7 +37,7 @@ async fn main() {
     tracing::subscriber::set_global_default(subscriber).expect("Failed to set subscriber");
 
     let cors = CorsLayer::new()
-    .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+    .allow_methods([Method::GET, Method::POST, Method::OPTIONS, Method::PATCH])
     .allow_origin(Any)
     .allow_headers(AllowHeaders::any());
 

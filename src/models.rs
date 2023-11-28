@@ -54,3 +54,5 @@ pub struct FriendRequest {
     pub recipient: Uuid,
     pub accepted: Option<bool>
 }
+
+

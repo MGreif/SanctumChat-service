@@ -1,16 +1,12 @@
 use std::sync::Arc;
-
 use axum::{Extension, extract::State, Json, response::IntoResponse};
-use axum::body::Body;
 use axum::extract::Path;
 use axum::http::StatusCode;
-use diesel::pg::Pg;
-use diesel::sql_types::{Bool, Text, Uuid};
+use diesel::sql_types::{Bool, Text, Uuid, Nullable};
 
-use crate::models::{Friend, UserDTO, FriendRequest, UserAliasDTO};
+use crate::models::{UserDTO, FriendRequest};
 use crate::schema::users;
-use crate::{config::AppState, utils::jwt::Token, schema::friends};
-use crate::schema::friends::dsl::*;
+use crate::{config::AppState, utils::jwt::Token};
 use diesel::prelude::*;
 use serde_json::json;
 use tracing::info;
@@ -28,17 +24,42 @@ pub struct FriendRequestGETDTO {
 }
 
 
+
+use diesel::sql_types::BigInt;
+
+#[derive(QueryableByName)]
+struct Count {
+    #[sql_type = "BigInt"]
+    count: i64,
+}
+
+
 #[derive(serde::Deserialize, Debug, serde::Serialize)]
 pub struct FriendRequestPOSTRequestDTO {
     recipient: String
 }
+
+#[derive(Debug, serde::Deserialize, serde::Serialize, QueryableByName)]
+pub struct FriendRequestGETResponseDTO {
+    #[diesel(sql_type = Uuid)]
+    pub id: uuid::Uuid,
+    #[diesel(sql_type = Uuid)]
+    pub sender_id: uuid::Uuid,
+    #[diesel(sql_type = Nullable<Text>)]
+    pub sender_name: Option<String>,
+    #[diesel(sql_type = Uuid)]
+    pub recipient: uuid::Uuid,
+    #[diesel(sql_type = Nullable<Bool>)]
+    pub accepted: Option<bool>
+}
 pub async fn get_friend_requests(State(app_state): State<Arc<AppState>>, token: Extension<Token>) -> impl IntoResponse {
     let mut pool = app_state.db_pool.get().expect("[get_friend_requests] Could not get connection pool");
     let issuer: UserDTO = users::table.filter(users::id.eq(token.sub)).get_result(&mut pool).unwrap();
-    let query = diesel::sql_query("SELECT * FROM friend_requests as r WHERE r.recipient = $1").bind::<diesel::sql_types::Uuid, _>(token.sub);
+    let query = diesel::sql_query("SELECT r.id as id, u.id as sender_id, u.name as sender_name, r.recipient as recipient, r.accepted as accepted FROM friend_requests as r INNER JOIN users as u ON u.id = r.sender WHERE r.recipient = $1 AND r.accepted IS NULL").bind::<diesel::sql_types::Uuid, _>(token.sub);
     println!("query: {}", diesel::debug_query::<diesel::pg::Pg, _>(&query).to_string());
     info!("sql querry {:?} {}", &query, token.sub.to_string());
-    let friend_requests_results: Vec<FriendRequest> = query.load(&mut pool).expect("Could not get friend_requests");
+    let friend_requests_results = query.load(&mut pool).expect("Could not get friend_requests");
+    let friend_requests_results: Vec<FriendRequestGETResponseDTO> = friend_requests_results;
     return axum::Json(json!(friend_requests_results))
 }
 
@@ -48,6 +69,26 @@ pub async fn create_friend_request(State(app_state): State<Arc<AppState>>, token
         Err(err) => return HTTPResponse::<FriendRequest> { status: StatusCode::BAD_REQUEST, message: Some(String::from("[create_friend_requests] Failed validating recipient uuid")), data: None },
         Ok(t) => t
     };
+
+    let mut already_present = diesel::sql_query("SELECT COUNT(*) FROM friend_requests WHERE sender = $1 AND recipient = $2").bind::<diesel::sql_types::Uuid, _>(token.sub).bind::<Uuid, _>(recipient).load::<Count>(&mut pool).expect("Could not get friend requests");
+    let already_present = match already_present.pop() {
+        Some(i) => i.count,
+        None => return     HTTPResponse::<FriendRequest> {
+            status: StatusCode::BAD_REQUEST,
+            data: None,
+            message: Some(format!("Could not get present friend-requests"))
+        },
+    };
+
+    match already_present {
+        0 => {},
+        _ => return HTTPResponse::<FriendRequest> {
+            status: StatusCode::BAD_REQUEST,
+            data: None,
+            message: Some(format!("There is still a friend request present (Already created or pending or whatever. TODO: Change later)"))
+        }
+    };
+
 
     let new_request = FriendRequest {
         id: uuid::Uuid::new_v4(),
@@ -86,6 +127,19 @@ pub async fn patch_friend_request(State(app_state): State<Arc<AppState>>, token:
         Err(err) => return HTTPResponse::<FriendRequest> { status: StatusCode::BAD_REQUEST, message: Some(String::from("[patch_friend_requests] Failed validating id")), data: None },
         Ok(t) => t
     };
+
+    match diesel::sql_query("SELECT COUNT(*) FROM friend_requests where id = $1 AND recipient = $2 AND accepted IS NULL")
+        .bind::<diesel::sql_types::Uuid, _>(request_id)
+        .bind::<diesel::sql_types::Uuid, _>(token.sub)
+        .load::<Count>(&mut pool)
+        .expect("Could not get count of friend requests").pop().expect("No rows").count {
+        0 =>   return  HTTPResponse::<FriendRequest> {
+            status: StatusCode::BAD_REQUEST,
+            data: None,
+            message: Some(format!("No Friendrequest available", ))
+        },
+        _ => {}
+    }
 
 
     let mut query = diesel::sql_query("UPDATE friend_requests SET ").into_boxed();
