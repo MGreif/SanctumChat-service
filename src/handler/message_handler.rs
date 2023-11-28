@@ -13,7 +13,7 @@ use diesel::{prelude::*, BoolExpressionMethods};
 
 #[derive(serde::Deserialize, Debug, Clone)]
 pub struct GetMessageDTO {
-    pub origin: Uuid
+    pub origin: String
 }
 
 pub async fn get_messages(State(app_state): State<Arc<AppState>>, headers: HeaderMap, Query(query): Query<GetMessageDTO>) -> impl IntoResponse {
@@ -29,8 +29,8 @@ pub async fn get_messages(State(app_state): State<Arc<AppState>>, headers: Heade
     let token = token_into_typed(auth_header, app_state.config.env.HASHING_KEY.as_bytes()).expect("Could not get token");
     let mut pool = app_state.db_pool.get().expect("[get_messages] Could not get db pool");
 
-    let client_sent_or_received = sender.eq(token.sub).or(recipient.eq(token.sub));
-    let recipient_sent_or_received = sender.eq(query.origin).or(recipient.eq(query.origin));
+    let client_sent_or_received = sender.eq(token.sub.clone()).or(recipient.eq(token.sub.clone()));
+    let recipient_sent_or_received = sender.eq(query.origin.clone()).or(recipient.eq(query.origin));
     let db_messages: Vec<Message> = messages.select(all_columns).filter(client_sent_or_received).filter(recipient_sent_or_received).load(&mut pool).expect("[get_messages] Could not get messages");
     return (StatusCode::OK, axum::Json(json!(db_messages)))
 }

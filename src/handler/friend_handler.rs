@@ -43,19 +43,19 @@ pub struct FriendRequestPOSTRequestDTO {
 pub struct FriendRequestGETResponseDTO {
     #[diesel(sql_type = Uuid)]
     pub id: uuid::Uuid,
-    #[diesel(sql_type = Uuid)]
-    pub sender_id: uuid::Uuid,
+    #[diesel(sql_type = Text)]
+    pub sender_id: String,
     #[diesel(sql_type = Nullable<Text>)]
     pub sender_name: Option<String>,
-    #[diesel(sql_type = Uuid)]
-    pub recipient: uuid::Uuid,
+    #[diesel(sql_type = Text)]
+    pub recipient: String,
     #[diesel(sql_type = Nullable<Bool>)]
     pub accepted: Option<bool>
 }
 pub async fn get_friend_requests(State(app_state): State<Arc<AppState>>, token: Extension<Token>) -> impl IntoResponse {
     let mut pool = app_state.db_pool.get().expect("[get_friend_requests] Could not get connection pool");
-    let issuer: UserDTO = users::table.filter(users::id.eq(token.sub)).get_result(&mut pool).unwrap();
-    let query = diesel::sql_query("SELECT r.id as id, u.id as sender_id, u.name as sender_name, r.recipient as recipient, r.accepted as accepted FROM friend_requests as r INNER JOIN users as u ON u.id = r.sender WHERE r.recipient = $1 AND r.accepted IS NULL").bind::<diesel::sql_types::Uuid, _>(token.sub);
+    let issuer: UserDTO = users::table.filter(users::username.eq(token.sub.clone())).get_result(&mut pool).unwrap();
+    let query = diesel::sql_query("SELECT r.id as id, u.username as sender_id, u.name as sender_name, r.recipient as recipient, r.accepted as accepted FROM friend_requests as r INNER JOIN users as u ON u.username = r.sender WHERE r.recipient = $1 AND r.accepted IS NULL").bind::<diesel::sql_types::Text, _>(token.sub.clone());
     println!("query: {}", diesel::debug_query::<diesel::pg::Pg, _>(&query).to_string());
     info!("sql querry {:?} {}", &query, token.sub.to_string());
     let friend_requests_results = query.load(&mut pool).expect("Could not get friend_requests");
@@ -65,12 +65,9 @@ pub async fn get_friend_requests(State(app_state): State<Arc<AppState>>, token: 
 
 pub async fn create_friend_request(State(app_state): State<Arc<AppState>>, token: Extension<Token>, Json(body): Json<FriendRequestPOSTRequestDTO>) -> impl IntoResponse {
     let mut pool = app_state.db_pool.get().expect("[create_friend_requests] Could not get connection pool");
-    let recipient: uuid::Uuid = match uuid::Uuid::parse_str(body.recipient.as_str()) {
-        Err(err) => return HTTPResponse::<FriendRequest> { status: StatusCode::BAD_REQUEST, message: Some(String::from("[create_friend_requests] Failed validating recipient uuid")), data: None },
-        Ok(t) => t
-    };
+    let recipient = body.recipient;
 
-    let mut already_present = diesel::sql_query("SELECT COUNT(*) FROM friend_requests WHERE sender = $1 AND recipient = $2").bind::<diesel::sql_types::Uuid, _>(token.sub).bind::<Uuid, _>(recipient).load::<Count>(&mut pool).expect("Could not get friend requests");
+    let mut already_present = diesel::sql_query("SELECT COUNT(*) FROM friend_requests WHERE sender = $1 AND recipient = $2").bind::<diesel::sql_types::Text, _>(token.sub.clone()).bind::<Text, _>(&recipient).load::<Count>(&mut pool).expect("Could not get friend requests");
     let already_present = match already_present.pop() {
         Some(i) => i.count,
         None => return     HTTPResponse::<FriendRequest> {
@@ -93,8 +90,8 @@ pub async fn create_friend_request(State(app_state): State<Arc<AppState>>, token
     let new_request = FriendRequest {
         id: uuid::Uuid::new_v4(),
         accepted: None,
-        recipient: recipient,
-        sender: token.sub
+        recipient: recipient.clone(),
+        sender: token.sub.clone()
     };
     let friend_request = diesel::insert_into(friend_requests).values(&new_request).execute(&mut pool).expect("[create_friend_requests] Could not insert friend request");
     HTTPResponse::<FriendRequest> {
@@ -130,7 +127,7 @@ pub async fn patch_friend_request(State(app_state): State<Arc<AppState>>, token:
 
     match diesel::sql_query("SELECT COUNT(*) FROM friend_requests where id = $1 AND recipient = $2 AND accepted IS NULL")
         .bind::<diesel::sql_types::Uuid, _>(request_id)
-        .bind::<diesel::sql_types::Uuid, _>(token.sub)
+        .bind::<diesel::sql_types::Text, _>(token.sub.clone())
         .load::<Count>(&mut pool)
         .expect("Could not get count of friend requests").pop().expect("No rows").count {
         0 =>   return  HTTPResponse::<FriendRequest> {
@@ -157,7 +154,7 @@ pub async fn patch_friend_request(State(app_state): State<Arc<AppState>>, token:
 
 pub async fn get_friends(State(app_state): State<Arc<AppState>>, token: Extension<Token>) -> impl IntoResponse {
     let mut pool = app_state.db_pool.get().expect("[get_friends] Could not get connection pool");
-    let result = get_friends_for_user_from_db(& mut pool, token.sub).await;
+    let result = get_friends_for_user_from_db(& mut pool, token.sub.clone()).await;
     return HTTPResponse::<Vec<UserDTO>> {
         status: StatusCode::OK,
         data: Some(result),

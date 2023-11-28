@@ -1,11 +1,11 @@
 -- Your SQL goes here
 CREATE TABLE IF NOT EXISTS friend_requests (
     id UUID NOT NULL DEFAULT uuid_generate_v4(),
-    sender UUID NOT NULL,
-    recipient UUID NOT NULL,
+    sender varchar(30) NOT NULL,
+    recipient varchar(30) NOT NULL,
     accepted bool, -- Can be null if friend request is pending
-    CONSTRAINT fk_sender FOREIGN KEY(sender) REFERENCES users(id),
-    CONSTRAINT fk_recipient FOREIGN KEY(recipient) REFERENCES users(id),
+    CONSTRAINT fk_sender FOREIGN KEY(sender) REFERENCES users(username),
+    CONSTRAINT fk_recipient FOREIGN KEY(recipient) REFERENCES users(username),
     PRIMARY KEY(id) 
 );
 
@@ -13,10 +13,10 @@ CREATE TABLE IF NOT EXISTS friend_requests (
 CREATE TABLE IF NOT EXISTS friends (
 	id UUID NOT NULL DEFAULT uuid_generate_v4(),
 	PRIMARY KEY(id),
-	user_id UUID NOT NULL,
-	befriended_user_id UUID NOT NULL,
-	CONSTRAINT fk_user FOREIGN KEY(user_id) REFERENCES users(id),
-	CONSTRAINT fk_befriended_user_id FOREIGN KEY(befriended_user_id) REFERENCES users(id)
+	user_id varchar(30) NOT NULL,
+	befriended_user_id varchar(30) NOT NULL,
+	CONSTRAINT fk_user FOREIGN KEY(user_id) REFERENCES users(username),
+	CONSTRAINT fk_befriended_user_id FOREIGN KEY(befriended_user_id) REFERENCES users(username)
 );
 
 CREATE OR REPLACE FUNCTION add_friends() RETURNS trigger AS $add_friends$

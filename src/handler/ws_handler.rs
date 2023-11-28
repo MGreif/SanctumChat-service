@@ -26,8 +26,8 @@ pub async fn ws_handler<'a>(ws: WebSocketUpgrade, State(app_state): State<Arc<Ap
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub struct SocketMessageDirect {
-    pub recipient: Option<Uuid>,
-    pub sender: Option<Uuid>,
+    pub recipient: Option<String>,
+    pub sender: Option<String>,
     pub message: String
 }
 #[derive(Clone, serde::Serialize, serde::Deserialize, Debug)]
@@ -44,13 +44,13 @@ pub struct SocketMessageEvent {
 
 #[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]
 pub struct SocketMessageOnlineUsers {
-    pub online_users: Vec<Uuid>
+    pub online_users: Vec<String>
 }
 
 #[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]
 pub struct SocketMessageStatusChange {
     pub status: EEvent,
-    pub user_id: Uuid
+    pub user_id: String
 }
 
 #[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]
@@ -98,7 +98,7 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
     let friends = client_session.active_friends.lock().await;
     info!("socket 5");
 
-    let mut online_friends: Vec<Uuid> = vec![];
+    let mut online_friends: Vec<String> = vec![];
 
     for friend_id in friends.iter() {
         online_friends.push(friend_id.to_owned());

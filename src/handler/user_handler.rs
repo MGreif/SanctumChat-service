@@ -12,6 +12,7 @@ use crate::utils::jwt::encrypt_user_token;
 pub struct UserCreateDTO {
     pub name: String,
     pub age: i32,
+    pub username: String,
     password: String
 }
 
@@ -36,7 +37,7 @@ pub async fn get_users<'a>(State(state): State<Arc<AppState>>, Query(query_param
 pub async fn create_user<'a>(State(state): State<Arc<AppState>>, Json(body): Json<UserCreateDTO>) -> impl IntoResponse {
     let mut db_conn = state.db_pool.get().expect("could not get database pool");
     let mut new_user = models::UserDTO { 
-        id: Uuid::new_v4(),
+        username: body.username,
         age: body.age,
         name: body.name,
         password: body.password
@@ -114,12 +115,12 @@ pub async fn logout<'a>(State(state): State<Arc<AppState>>, header: HeaderMap) -
 }
 
 pub async fn login<'a>(State(state): State<Arc<AppState>>, Json(body): Json<LoginDTO>) -> impl IntoResponse {
-    let LoginDTO { password: pw, username } = body;
+    let LoginDTO { password: pw, username: username_id } = body;
     let mut headers = HeaderMap::new();
     headers.insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
 
 
-    match DEFAULT_INPUT_FIELD_STRING_VALIDATOR.validate(&username) {
+    match DEFAULT_INPUT_FIELD_STRING_VALIDATOR.validate(&username_id) {
         Err(err) => {
             info!("{} - Validation error: {}", "name", err);
             return (headers, axum::Json(json!({"message": err, "field": "username", })))
@@ -137,16 +138,16 @@ pub async fn login<'a>(State(state): State<Arc<AppState>>, Json(body): Json<Logi
 
 
     let mut pool = state.db_pool.get().expect("Could not establish pool connection");
-    let user_result: Result<(Uuid, String, i32, String ), _> = users
+    let user_result: Result<(String, String, i32, String ), _> = users
         .select(users::all_columns)
-        .filter(name
-            .eq(&username)
+        .filter(username
+            .eq(&username_id)
             .and(password.eq(hash_string(&pw, state.config.env.HASHING_KEY.clone().as_bytes()))))
-        .first::<(Uuid, String, i32, String )>(&mut pool);
+        .first::<(String, String, i32, String )>(&mut pool);
 
     let user = match user_result {
         Err(_) => return (headers, axum::Json(json!({"message": "login failed, wrong username or password"}))),
-        Ok(result_id) => UserDTO { id: result_id.0, name: result_id.1, age: result_id.2, password: result_id.3 } 
+        Ok(result_id) => UserDTO { username: result_id.0, name: result_id.1, age: result_id.2, password: result_id.3 }
     };
 
 
@@ -154,7 +155,7 @@ pub async fn login<'a>(State(state): State<Arc<AppState>>, Json(body): Json<Logi
     update_user_friends(&user, state.clone()).await;
 
     let mut p2p_state = state.p2p_connections.lock().await;
-    p2p_state.insert(user.id.clone(), session_manager.to_owned());
+    p2p_state.insert(user.username.clone(), session_manager.to_owned());
 
 
     let session_token = encrypt_user_token(user, state.config.env.HASHING_KEY.as_bytes());
@@ -187,7 +188,7 @@ pub async fn token<'a>(State(app_state): State<Arc<AppState>>, headers: HeaderMa
     info!("token 3");
 
     let mut pool = app_state.db_pool.get().expect("Could not get db pool");
-    let user: UserDTO = users.select(all_columns).filter(id.eq(&token.sub)).first(&mut pool).expect("Could not get user");
+    let user: UserDTO = users.select(all_columns).filter(username.eq(&token.sub)).first(&mut pool).expect("Could not get user");
     info!("token 3.5");
 
     info!("token 4");

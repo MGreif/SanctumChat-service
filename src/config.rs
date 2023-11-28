@@ -11,7 +11,7 @@ pub struct AppState {
     pub db_pool: r2d2::Pool<r2d2::ConnectionManager<PgConnection>>,
     pub broadcast: broadcast::Sender<String>,
     // Hashmap of currently logged in users
-    pub p2p_connections: Mutex<HashMap<Uuid, Arc<Mutex<SessionManager>>>>,
+    pub p2p_connections: Mutex<HashMap<String, Arc<Mutex<SessionManager>>>>,
     pub config: ConfigManager
 }
 
