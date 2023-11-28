@@ -12,3 +12,12 @@ pub async fn get_friends_for_user_from_db(pool: &mut PooledConnection<Connection
     let friends_from_db: Vec<UserDTO> = query.load(pool).expect("[get_friends] could not get friends");
     friends_from_db
 }
+
+
+use diesel::sql_types::BigInt;
+
+#[derive(QueryableByName)]
+pub struct Count {
+    #[sql_type = "BigInt"]
+    pub count: i64,
+}

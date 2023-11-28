@@ -8,6 +8,7 @@ use crate::models::{UserDTO, FriendRequest};
 use crate::schema::users;
 use crate::{config::AppState, utils::jwt::Token};
 use diesel::prelude::*;
+use futures::stream::Count;
 use serde_json::json;
 use tracing::info;
 use crate::helper::errors::HTTPResponse;
@@ -22,17 +23,6 @@ pub struct FriendRequestGETDTO {
     pub recipient: Uuid,
     pub accepted: Option<bool>
 }
-
-
-
-use diesel::sql_types::BigInt;
-
-#[derive(QueryableByName)]
-struct Count {
-    #[sql_type = "BigInt"]
-    count: i64,
-}
-
 
 #[derive(serde::Deserialize, Debug, serde::Serialize)]
 pub struct FriendRequestPOSTRequestDTO {
@@ -67,7 +57,7 @@ pub async fn create_friend_request(State(app_state): State<Arc<AppState>>, token
     let mut pool = app_state.db_pool.get().expect("[create_friend_requests] Could not get connection pool");
     let recipient = body.recipient;
 
-    let mut already_present = diesel::sql_query("SELECT COUNT(*) FROM friend_requests WHERE sender = $1 AND recipient = $2").bind::<diesel::sql_types::Text, _>(token.sub.clone()).bind::<Text, _>(&recipient).load::<Count>(&mut pool).expect("Could not get friend requests");
+    let mut already_present = diesel::sql_query("SELECT COUNT(*) FROM friend_requests WHERE sender = $1 AND recipient = $2").bind::<diesel::sql_types::Text, _>(token.sub.clone()).bind::<Text, _>(&recipient).load::<crate::helper::sql::Count>(&mut pool).expect("Could not get friend requests");
     let already_present = match already_present.pop() {
         Some(i) => i.count,
         None => return     HTTPResponse::<FriendRequest> {
@@ -128,7 +118,7 @@ pub async fn patch_friend_request(State(app_state): State<Arc<AppState>>, token:
     match diesel::sql_query("SELECT COUNT(*) FROM friend_requests where id = $1 AND recipient = $2 AND accepted IS NULL")
         .bind::<diesel::sql_types::Uuid, _>(request_id)
         .bind::<diesel::sql_types::Text, _>(token.sub.clone())
-        .load::<Count>(&mut pool)
+        .load::<crate::helper::sql::Count>(&mut pool)
         .expect("Could not get count of friend requests").pop().expect("No rows").count {
         0 =>   return  HTTPResponse::<FriendRequest> {
             status: StatusCode::BAD_REQUEST,

@@ -6,6 +6,9 @@ use crate::{schema::users::dsl::*, helper::session::get_friends_in_p2p};
 use serde_json::json;
 use crate::{config::AppState, models::{UserDTO, self}, schema::{self, users::{self, all_columns}}, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR, utils::jwt::{hash_string, validate_user_token, token_into_typed}, helper::session::{prepare_user_session_manager, update_user_friends}};
 use diesel::{prelude::*};
+use diesel::sql_types::Text;
+use crate::helper::errors::HTTPResponse;
+use crate::helper::sql::Count;
 use crate::utils::jwt::encrypt_user_token;
 
 #[derive(serde::Deserialize)]
@@ -43,20 +46,52 @@ pub async fn create_user<'a>(State(state): State<Arc<AppState>>, Json(body): Jso
         password: body.password
     };
 
+    match DEFAULT_INPUT_FIELD_STRING_VALIDATOR.validate(&new_user.username) {
+        Err(err) => {
+            return HTTPResponse::<UserDTO> {
+                message: Some(format!("Username validation failed: {}", err)),
+                data: None,
+                status: StatusCode::BAD_REQUEST
+            }
+        },
+        Ok(_) => {}
+    }
     match DEFAULT_INPUT_FIELD_STRING_VALIDATOR.validate(&new_user.name) {
         Err(err) => {
-            info!("{} - Validation error: {}", "name", err);
-            return axum::Json(json!({"message": err, "field": "name", }))
+            return HTTPResponse::<UserDTO> {
+                message: Some(format!("Password validation failed: {}", err)),
+                data: None,
+                status: StatusCode::BAD_REQUEST
+            }
         },
         Ok(_) => {}
     }
     match DEFAULT_INPUT_FIELD_STRING_VALIDATOR.validate(&new_user.password) {
         Err(err) => {
-            info!("{} - Validation error: {}", "name", err);
-            return axum::Json(json!({"message": err, "field": "password", }))
+            return HTTPResponse::<UserDTO> {
+                message: Some(format!("Password validation failed: {}", err)),
+                data: None,
+                status: StatusCode::BAD_REQUEST
+            }
         },
         Ok(_) => {}
     }
+
+    let mut query = diesel::sql_query("SELECT COUNT(*) FROM users WHERE username = $1").bind::<Text, _>(&new_user.username).load::<Count>(&mut db_conn).expect("Could not get user count");
+    let count = match query.pop() {
+        None => 0,
+        Some(t) => t.count
+    };
+
+    match count {
+        0 => {},
+        _ => return HTTPResponse::<UserDTO> {
+                    message: Some(format!("Username is already in use")),
+                    data: None,
+                    status: StatusCode::BAD_REQUEST
+                }
+        }
+
 
     let encrypted_password = hash_string(&new_user.password, state.config.env.HASHING_KEY.clone().as_bytes());
     new_user.password = encrypted_password;
@@ -65,7 +100,11 @@ pub async fn create_user<'a>(State(state): State<Arc<AppState>>, Json(body): Jso
     let values = vec![new_user];
     diesel::insert_into(schema::users::table).values(&values).execute(&mut db_conn).expect("Could not insert data");
 
-    axum::Json(json!({"message": "User created successfully"}))
+    HTTPResponse::<UserDTO> {
+        message: Some(format!("User created successfully")),
+        data: None,
+        status: StatusCode::CREATED
+    }
 }
 
 #[derive(serde::Deserialize)]
