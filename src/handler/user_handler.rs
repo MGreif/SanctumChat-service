@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use axum::{extract::{Json, Query, State}, response::IntoResponse, http::{HeaderMap, header::{SET_COOKIE, self}, StatusCode}};
+use axum::http::HeaderValue;
 use tracing::info;
 use uuid::Uuid;
 use crate::{schema::users::dsl::*, helper::session::get_friends_in_p2p};
@@ -10,6 +11,9 @@ use diesel::sql_types::Text;
 use crate::helper::errors::HTTPResponse;
 use crate::helper::sql::Count;
 use crate::utils::jwt::encrypt_user_token;
+use openssl::rsa::Rsa;
+use base64;
+use base64::Engine;
 
 #[derive(serde::Deserialize)]
 pub struct UserCreateDTO {
@@ -17,7 +21,8 @@ pub struct UserCreateDTO {
     pub age: i32,
     pub username: String,
     password: String,
-    pub public_key: String
+    pub public_key: String,
+    pub generate_key: bool
 }
 
 #[derive(serde::Deserialize)]
@@ -40,45 +45,56 @@ pub async fn get_users<'a>(State(state): State<Arc<AppState>>, Query(query_param
 
 pub async fn create_user<'a>(State(state): State<Arc<AppState>>, Json(body): Json<UserCreateDTO>) -> impl IntoResponse {
     let mut db_conn = state.db_pool.get().expect("could not get database pool");
-
+    let mut headers = HeaderMap::new();
 
     match DEFAULT_INPUT_FIELD_STRING_VALIDATOR.validate(&body.username) {
         Err(err) => {
-            return HTTPResponse::<UserDTO> {
+            return (headers, HTTPResponse::<Vec<u8>> {
                 message: Some(format!("Username validation failed: {}", err)),
                 data: None,
                 status: StatusCode::BAD_REQUEST
-            }
+            })
         },
         Ok(_) => {}
     }
     match DEFAULT_INPUT_FIELD_STRING_VALIDATOR.validate(&body.name) {
         Err(err) => {
-            return HTTPResponse::<UserDTO> {
+            return (headers, HTTPResponse::<Vec<u8>> {
                 message: Some(format!("Password validation failed: {}", err)),
                 data: None,
                 status: StatusCode::BAD_REQUEST
-            }
+            })
         },
         Ok(_) => {}
     }
     match DEFAULT_INPUT_FIELD_STRING_VALIDATOR.validate(&body.password) {
         Err(err) => {
-            return HTTPResponse::<UserDTO> {
+            return (headers, HTTPResponse::<Vec<u8>> {
                 message: Some(format!("Password validation failed: {}", err)),
                 data: None,
                 status: StatusCode::BAD_REQUEST
-            }
+            })
         },
         Ok(_) => {}
     }
+
+    let mut private_key: Option<Vec<u8>> = None;
+    let mut pub_key: Vec<u8> =  body.public_key.as_bytes().to_vec();
+    if body.generate_key == true {
+        let rsa_key = Rsa::generate(2048).unwrap();
+        let rsa_private_key = rsa_key.private_key_to_pem().unwrap();
+        let rsa_public_key = rsa_key.public_key_to_pem().unwrap();
+        private_key = Some(rsa_private_key);
+        let output = base64::engine::general_purpose::STANDARD.encode(rsa_public_key.as_slice());
+        pub_key = output.as_bytes().to_vec();
+    };
 
     let mut new_user = models::UserDTO {
         username: body.username,
         age: body.age,
         name: body.name,
         password: body.password,
-        public_key: body.public_key.as_bytes().to_vec()
+        public_key: pub_key
     };
 
     let mut query = diesel::sql_query("SELECT COUNT(*) FROM users WHERE username = $1").bind::<Text, _>(&new_user.username).load::<Count>(&mut db_conn).expect("Could not get user count");
@@ -89,11 +105,11 @@ pub async fn create_user<'a>(State(state): State<Arc<AppState>>, Json(body): Jso
 
     match count {
         0 => {},
-        _ => return HTTPResponse::<UserDTO> {
+        _ => return (headers, HTTPResponse::<Vec<u8>> {
                     message: Some(format!("Username is already in use")),
                     data: None,
                     status: StatusCode::BAD_REQUEST
-                }
+                })
         }
 
 
@@ -101,14 +117,18 @@ pub async fn create_user<'a>(State(state): State<Arc<AppState>>, Json(body): Jso
     new_user.password = encrypted_password;
     info!("{:?}", new_user);
 
+
+
     let values = vec![new_user];
     diesel::insert_into(schema::users::table).values(&values).execute(&mut db_conn).expect("Could not insert data");
 
-    HTTPResponse::<UserDTO> {
+
+
+    (headers, HTTPResponse::<Vec<u8>> {
         message: Some(format!("User created successfully")),
-        data: None,
+        data: private_key,
         status: StatusCode::CREATED
-    }
+    })
 }
 
 #[derive(serde::Deserialize)]

@@ -1,4 +1,5 @@
 use axum::{response::IntoResponse, http::StatusCode};
+use axum::http::HeaderMap;
 use serde::Serialize;
 use serde_json::json;
 
@@ -6,7 +7,7 @@ use serde_json::json;
 pub struct HTTPResponse<G: Serialize> {
     pub message: Option<String>,
     pub status: StatusCode,
-    pub data: Option<G>
+    pub data: Option<G>,
 }
 
 impl<T: Serialize> IntoResponse for HTTPResponse<T> {

@@ -30,7 +30,7 @@ pub fn validate_user_token(token: String, secret_key: &[u8]) -> Result<bool, Str
     let claims_wrapped: Result<BTreeMap<String, String>, jwt::Error> = token.verify_with_key(&key);
 
 
-    let claims = match claims_wrapped {
+    match claims_wrapped {
         Err(_) => return Err("Error validating user token".to_owned()),
         Ok(res) => res,
     };

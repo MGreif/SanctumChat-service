@@ -11,6 +11,8 @@ use diesel::prelude::*;
 use futures::stream::Count;
 use serde_json::json;
 use tracing::info;
+use tracing_subscriber::fmt::format;
+use crate::handler::ws_handler::{SocketMessage, SocketMessageFriendRequest};
 use crate::helper::errors::HTTPResponse;
 use crate::helper::sql::get_friends_for_user_from_db;
 use crate::schema::friend_requests::dsl::friend_requests;
@@ -63,7 +65,7 @@ pub async fn create_friend_request(State(app_state): State<Arc<AppState>>, token
         None => return     HTTPResponse::<FriendRequest> {
             status: StatusCode::BAD_REQUEST,
             data: None,
-            message: Some(format!("Could not get present friend-requests"))
+            message: Some(format!("Could not get present friend-requests count"))
         },
     };
 
@@ -83,11 +85,30 @@ pub async fn create_friend_request(State(app_state): State<Arc<AppState>>, token
         recipient: recipient.clone(),
         sender: token.sub.clone()
     };
-    let friend_request = diesel::insert_into(friend_requests).values(&new_request).execute(&mut pool).expect("[create_friend_requests] Could not insert friend request");
+    let inserted_rows = match diesel::insert_into(friend_requests).values(&new_request).execute(&mut pool) {
+        Ok(t) => t,
+        Err(err) => return HTTPResponse::<FriendRequest> {
+            data: None,
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            message: Some(format!("Could not insert friend request: {:?}", err))
+        }
+    };
+
+    let receiver_session_manager = app_state.p2p_connections.lock().await;
+    let receiver_session_manager = receiver_session_manager.get(&recipient.clone());
+    if let Some(sm) = receiver_session_manager {
+        let sm = sm.lock().await;
+        let friend_request_message = SocketMessageFriendRequest {
+            friend_request_id: new_request.id,
+            sender_username: token.sub.clone()
+        };
+        sm.send_direct_message(SocketMessage::SocketMessageFriendRequest(friend_request_message)).await;
+    };
+
     HTTPResponse::<FriendRequest> {
         status: StatusCode::CREATED,
         data: Some(new_request),
-        message: Some(format!("Inserted: {} rows", friend_request))
+        message: Some(format!("Inserted: {} rows", inserted_rows))
     }
 }
 

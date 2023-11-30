@@ -12,6 +12,7 @@ use crate::{config::AppState, utils::jwt::{validate_user_token, token_into_typed
 
 use crate::schema::messages::dsl::messages;
 use diesel::prelude::*;
+use crate::models::UserDTO;
 
 #[derive(serde::Deserialize)]
 pub struct WsQuery {
@@ -55,13 +56,19 @@ pub struct SocketMessageStatusChange {
 }
 
 #[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]
+pub struct SocketMessageFriendRequest {
+    pub sender_username: String,
+    pub friend_request_id: Uuid
+}
+
+#[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]
 #[serde(untagged)]
 
 pub enum SocketMessage {
-    SocketMessageEvent(SocketMessageEvent),
     SocketMessageDirect(SocketMessageDirect),
     SocketMessageStatusChange(SocketMessageStatusChange),
-    SocketMessageOnlineUsers(SocketMessageOnlineUsers)
+    SocketMessageOnlineUsers(SocketMessageOnlineUsers),
+    SocketMessageFriendRequest(SocketMessageFriendRequest)
 }
 
 

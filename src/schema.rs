@@ -29,9 +29,9 @@ diesel::table! {
         #[max_length = 30]
         recipient -> Varchar,
         sent_at -> Timestamp,
-        #[max_length = 1000]
+        #[max_length = 1024]
         content -> Varchar,
-        #[max_length = 1000]
+        #[max_length = 1024]
         content_self_encrypted -> Varchar,
     }
 }
