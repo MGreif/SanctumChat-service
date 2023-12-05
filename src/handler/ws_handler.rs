@@ -12,7 +12,6 @@ use crate::{config::AppState, utils::jwt::{validate_user_token, token_into_typed
 
 use crate::schema::messages::dsl::messages;
 use diesel::prelude::*;
-use crate::models::UserDTO;
 
 #[derive(serde::Deserialize)]
 pub struct WsQuery {
@@ -32,6 +31,14 @@ pub struct SocketMessageDirect {
     pub message: String,
     pub message_self_encrypted: String
 }
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub struct SocketMessageNotification {
+    pub message: String,
+    pub title: String,
+    pub status: String
+}
+
 #[derive(Clone, serde::Serialize, serde::Deserialize, Debug)]
 
 pub enum EEvent {
@@ -66,6 +73,7 @@ pub struct SocketMessageFriendRequest {
 
 pub enum SocketMessage {
     SocketMessageDirect(SocketMessageDirect),
+    SocketMessageNotification(SocketMessageNotification),
     SocketMessageStatusChange(SocketMessageStatusChange),
     SocketMessageOnlineUsers(SocketMessageOnlineUsers),
     SocketMessageFriendRequest(SocketMessageFriendRequest)
@@ -73,10 +81,8 @@ pub enum SocketMessage {
 
 
 async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: WsQuery) {
-    info!("socket 1");
     let (sender, mut receiver) = stream.split();
     let sender = Arc::new(Mutex::new(sender));
-    info!("socket 2");
 
     let app_state_orig = app_state.clone();
 
@@ -89,14 +95,12 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
         },
         Ok(_) => {}
     }
-    info!("socket 3");
 
-    let token = token_into_typed(query.token.clone(), app_state_orig.config.env.HASHING_KEY.as_bytes().clone()).unwrap();
+    let token = token_into_typed(&query.token, app_state_orig.config.env.HASHING_KEY.as_bytes().clone()).unwrap();
 
     let p2p_connection = app_state_orig.p2p_connections.lock().await;
     let client_session = p2p_connection.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await;
 
-    info!("socket 4");
 
     let mut client_rx = client_session.user_socket.subscribe();
 
@@ -104,7 +108,6 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
 
     // get online friends at client start/initialization
     let friends = client_session.active_friends.lock().await;
-    info!("socket 5");
 
     let mut online_friends: Vec<String> = vec![];
 
@@ -117,7 +120,6 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
     drop(p2p_connection);
 
 
-    info!("socket 6");
 
 
     let mess = SocketMessage::SocketMessageOnlineUsers(SocketMessageOnlineUsers { online_users: online_friends });
@@ -125,15 +127,10 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
 
     sender.lock().await.send(Message::Text(format!("You joined the channel"))).await.expect("Failed sending joining message");
 
-    info!("socket 7");
-
-
     let msg = format!("{} joined.", token.sub);
     tracing::debug!("{msg}");
     let _ = app_state_orig.broadcast.send(msg);
 
-
-    info!("socket 8");
 
     let mut sender_receive_task = tokio::spawn(async move {
         while let Ok(msg) = client_rx.recv().await {
@@ -147,11 +144,11 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
     // Spawn a task that takes messages from the websocket, prepends the user
     // name, and sends them to all broadcast subscribers.
 
+    let app_state_clone2 = app_state.clone();
     let app_state_clone = app_state.clone();
-    info!("socket 9");
-
 
     let token = token.clone();
+    let token2 = token.clone();
 
     let mut receive_task = tokio::spawn(async move {
         while let Some(Ok(Message::Text(text))) = receiver.next().await {
@@ -191,22 +188,30 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
                 None => {},
                 Some(sm) => {
                     sm.lock().await.send_direct_message(SocketMessage::SocketMessageDirect(message.clone())).await
-
+                    
                 }
             }
         }
     });
 
-    info!("socket 10");
-
     tokio::select! {
         _ = (&mut receive_task) => {
             sender_receive_task.abort();
+            let own_p2p = app_state_clone2.p2p_connections.lock().await;
+            let own_p2p = own_p2p.get(&token2.sub.clone());
+            if let Some(sm) = own_p2p {
+                let own_p2p = sm.lock().await;
+                own_p2p.notify_offline().await;
+            };
         },
         _ = (&mut sender_receive_task) => {
             receive_task.abort();
+            let own_p2p = app_state_clone2.p2p_connections.lock().await;
+            let own_p2p = own_p2p.get(&token2.sub.clone());
+            if let Some(sm) = own_p2p {
+                let own_p2p = sm.lock().await;
+                own_p2p.notify_offline().await;
+            };
         },
     };
-    info!("socket 11");
-
 }

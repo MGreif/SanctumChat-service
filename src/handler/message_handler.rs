@@ -4,10 +4,8 @@ use axum::extract::Query;
 use axum::http::StatusCode;
 use axum::{response::IntoResponse, extract::State, http::HeaderMap};
 use serde_json::json;
-use uuid::Uuid;
-
 use crate::schema::messages::{*};
-use crate::{config::AppState, utils::jwt::token_into_typed, models::Message, schema::messages};
+use crate::{config::AppState, utils::jwt::token_into_typed, models::Message};
 use crate::{schema::messages::dsl::*};
 use diesel::{prelude::*, BoolExpressionMethods};
 
@@ -26,7 +24,7 @@ pub async fn get_messages(State(app_state): State<Arc<AppState>>, headers: Heade
             bearer_string.replace("Bearer ", "")
         }
     };
-    let token = token_into_typed(auth_header, app_state.config.env.HASHING_KEY.as_bytes()).expect("Could not get token");
+    let token = token_into_typed(&auth_header, app_state.config.env.HASHING_KEY.as_bytes()).expect("Could not get token");
     let mut pool = app_state.db_pool.get().expect("[get_messages] Could not get db pool");
 
     let client_sent_or_received = sender.eq(token.sub.clone()).or(recipient.eq(token.sub.clone()));

@@ -1,6 +1,7 @@
+use core::time;
 use std::sync::Arc;
 use axum::{middleware, http::Method};
-use config::{EnvConfig, AppState, ConfigManager};
+use config::{EnvConfig, AppState};
 use diesel::r2d2::{ConnectionManager, Pool};
 use tower_http::cors::{CorsLayer, Any, AllowHeaders};
 use std::net::SocketAddr;
@@ -17,7 +18,6 @@ mod config;
 mod handler;
 mod validation;
 use handler::{user_handler, message_handler, friend_handler};
-use crate::schema::friends::dsl::friends;
 
 mod middlewares;
 mod utils;
@@ -45,6 +45,16 @@ async fn main() {
     let pool = get_connection_pool(config.env.clone());
     let app_state = Arc::new(AppState::new(pool, config.clone()));
 
+    let app_state_clone = app_state.clone();
+
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(time::Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            app_state_clone.remove_expired_p2p_sessions().await;
+        }
+    });
+
     let app = Router::new()
         .route("/logout", post(user_handler::logout))
         .route("/messages", get(message_handler::get_messages))
@@ -63,9 +73,7 @@ async fn main() {
         .with_state(config.clone());
     
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     tracing::debug!("listening on {}", addr);
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    axum::serve(listener, app).await.unwrap();
 }

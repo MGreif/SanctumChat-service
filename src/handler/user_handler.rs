@@ -1,12 +1,10 @@
 use std::sync::Arc;
-use axum::{extract::{Json, Query, State}, response::IntoResponse, http::{HeaderMap, header::{SET_COOKIE, self}, StatusCode}};
-use axum::http::HeaderValue;
+use axum::{extract::{Json, Query, State}, response::IntoResponse, http::{HeaderMap, header::{SET_COOKIE, self}, StatusCode}, Extension};
 use tracing::info;
-use uuid::Uuid;
-use crate::{schema::users::dsl::*, helper::session::get_friends_in_p2p};
+use crate::{schema::users::dsl::*, utils::jwt::Token};
 use serde_json::json;
 use crate::{config::AppState, models::{UserDTO, self}, schema::{self, users::{self, all_columns}}, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR, utils::jwt::{hash_string, validate_user_token, token_into_typed}, helper::session::{prepare_user_session_manager, update_user_friends}};
-use diesel::{prelude::*};
+use diesel::prelude::*;
 use diesel::sql_types::Text;
 use crate::helper::errors::HTTPResponse;
 use crate::helper::sql::Count;
@@ -45,7 +43,7 @@ pub async fn get_users<'a>(State(state): State<Arc<AppState>>, Query(query_param
 
 pub async fn create_user<'a>(State(state): State<Arc<AppState>>, Json(body): Json<UserCreateDTO>) -> impl IntoResponse {
     let mut db_conn = state.db_pool.get().expect("could not get database pool");
-    let mut headers = HeaderMap::new();
+    let headers = HeaderMap::new();
 
     match DEFAULT_INPUT_FIELD_STRING_VALIDATOR.validate(&body.username) {
         Err(err) => {
@@ -137,44 +135,21 @@ pub struct LoginDTO {
     pub password: String
 }
 
-pub async fn logout<'a>(State(state): State<Arc<AppState>>, header: HeaderMap) -> impl IntoResponse {
-    let token = header.get("authorization");
-    info!("logout 1");
-    let token = match token {
-        None => {
-            return axum::Json(json!({"message": "not logged in"}))
+pub async fn logout<'a>(State(state): State<Arc<AppState>>, token: Extension<Token>) -> impl IntoResponse {
+    match state.logout_user(&token.sub).await {
+        Err(err) => return HTTPResponse::<()> {
+            message: Some(err),
+            data: None,
+            status: StatusCode::INTERNAL_SERVER_ERROR
         },
-        Some(token) => token_into_typed(token.to_str().unwrap().to_owned().replace("Bearer ", ""), state.config.env.HASHING_KEY.as_bytes()).unwrap()
-    };
-    info!("logout 2");
-
-    let mut p2p = state.p2p_connections.lock().await;
-    info!("logout 3");
-    let (user_id, session_manager) = match p2p.remove_entry(&token.sub) {
-        None => {
-            return axum::Json(json!({"message": "user not p2p pool"}))
-        },
-        Some(user) => user,
+        Ok(_) => {}
     };
 
-    info!("logout 4");
-
-    session_manager.lock().await.notify_offline(&p2p).await;
-    drop(p2p);
-    // Remove user from logged in sessions
-
-    info!("logout 5");
-
-    let friends = get_friends_in_p2p(state.clone(), token.sub).await;
-    // Remoe user from currently logged in friends 'active_friends'
-    for (_, friend_user_session_manager) in friends {
-        friend_user_session_manager.lock().await.remove_friend(&user_id).await;
+    HTTPResponse::<()> {
+        message: Some(String::from("Successfully logged out")),
+        data: None,
+        status: StatusCode::INTERNAL_SERVER_ERROR
     }
-    info!("logout 6");
-
-
-
-    axum::Json(json!({"message": "logged out"}))
 }
 
 pub async fn login<'a>(State(state): State<Arc<AppState>>, Json(body): Json<LoginDTO>) -> impl IntoResponse {
@@ -213,43 +188,22 @@ pub async fn login<'a>(State(state): State<Arc<AppState>>, Json(body): Json<Logi
         Ok(result_id) => UserDTO { username: result_id.0, name: result_id.1, age: result_id.2, password: result_id.3, public_key: result_id.4 }
     };
 
-
-    let session_manager = prepare_user_session_manager(&user, state.clone()).await;
+    let session_token = encrypt_user_token(user.clone(), state.config.env.HASHING_KEY.as_bytes());
+    let token = token_into_typed(&session_token, state.config.env.HASHING_KEY.as_bytes()).expect("Could not parse token");
+    let session_manager = prepare_user_session_manager(&user, token, state.clone()).await;
     update_user_friends(&user, state.clone()).await;
 
     let mut p2p_state = state.p2p_connections.lock().await;
     p2p_state.insert(user.username.clone(), session_manager.to_owned());
 
 
-    let session_token = encrypt_user_token(user, state.config.env.HASHING_KEY.as_bytes());
     headers.insert(SET_COOKIE, format!("session={}; Max-Age=2592000; Path=/; SameSite=None", session_token).parse().unwrap());
 
 
     (headers, axum::Json(json!({"message": "login successful", "token": session_token})))
 }
 
-pub async fn token<'a>(State(app_state): State<Arc<AppState>>, headers: HeaderMap) -> (StatusCode, String) {
-    info!("token 1");
-    let auth_header = match headers.get("authorization") {
-        None => return (StatusCode::UNAUTHORIZED, String::from("No auth header provided")),
-        Some(header) => {
-            let owned = header.to_owned();
-            let bearer_string = owned.to_str().unwrap().to_owned();
-            bearer_string.replace("Bearer ", "")
-        }
-    };
-
-    let is_valid = validate_user_token(auth_header.clone(), app_state.config.env.HASHING_KEY.as_bytes());
-    info!("token 2");
-    
-    match is_valid {
-        Err(err) => {return (StatusCode::INTERNAL_SERVER_ERROR, err)},
-        Ok(_) => {}
-    }
-
-    let token = token_into_typed(auth_header.clone(), app_state.config.env.HASHING_KEY.as_bytes()).unwrap();
-    info!("token 3");
-
+pub async fn token<'a>(State(app_state): State<Arc<AppState>>, Extension(token): Extension<Token>, headers: HeaderMap) -> (StatusCode, String) {
     let mut pool = app_state.db_pool.get().expect("Could not get db pool");
     let user: UserDTO = match users.select(all_columns).filter(username.eq(&token.sub)).first(&mut pool) {
         Ok(user) => user,
@@ -259,12 +213,12 @@ pub async fn token<'a>(State(app_state): State<Arc<AppState>>, headers: HeaderMa
 
     info!("token 4");
 
-    let session_manager = prepare_user_session_manager(&user, app_state.clone()).await;
+    let session_manager = prepare_user_session_manager(&user, token.clone(), app_state.clone()).await;
     info!("token 4.5");
     update_user_friends(&user, app_state.clone()).await;
     let mut p2p_state = app_state.p2p_connections.lock().await;
-    p2p_state.insert(token.sub, session_manager);
+    p2p_state.insert(token.clone().sub, session_manager);
     info!("token 5");
 
-    (StatusCode::OK, axum::Json::from(json!({"token": auth_header})).to_string())
+    (StatusCode::OK, axum::Json::from(json!({"token": token})).to_string())
 }

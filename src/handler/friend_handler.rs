@@ -8,10 +8,8 @@ use crate::models::{UserDTO, FriendRequest};
 use crate::schema::users;
 use crate::{config::AppState, utils::jwt::Token};
 use diesel::prelude::*;
-use futures::stream::Count;
 use serde_json::json;
 use tracing::info;
-use tracing_subscriber::fmt::format;
 use crate::handler::ws_handler::{SocketMessage, SocketMessageFriendRequest};
 use crate::helper::errors::HTTPResponse;
 use crate::helper::sql::get_friends_for_user_from_db;
@@ -132,7 +130,7 @@ pub async fn patch_friend_request(State(app_state): State<Arc<AppState>>, token:
     }
 
     let request_id: uuid::Uuid = match uuid::Uuid::parse_str(&uuid.as_str()) {
-        Err(err) => return HTTPResponse::<FriendRequest> { status: StatusCode::BAD_REQUEST, message: Some(String::from("[patch_friend_requests] Failed validating id")), data: None },
+        Err(_) => return HTTPResponse::<FriendRequest> { status: StatusCode::BAD_REQUEST, message: Some(String::from("[patch_friend_requests] Failed validating id")), data: None },
         Ok(t) => t
     };
 
@@ -165,7 +163,7 @@ pub async fn patch_friend_request(State(app_state): State<Arc<AppState>>, token:
 
 pub async fn get_friends(State(app_state): State<Arc<AppState>>, token: Extension<Token>) -> impl IntoResponse {
     let mut pool = app_state.db_pool.get().expect("[get_friends] Could not get connection pool");
-    let result = get_friends_for_user_from_db(& mut pool, token.sub.clone()).await;
+    let result = get_friends_for_user_from_db(& mut pool, &token.sub).await;
     return HTTPResponse::<Vec<UserDTO>> {
         status: StatusCode::OK,
         data: Some(result),
