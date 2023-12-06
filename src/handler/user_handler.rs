@@ -148,7 +148,7 @@ pub async fn logout<'a>(State(state): State<Arc<AppState>>, token: Extension<Tok
     HTTPResponse::<()> {
         message: Some(String::from("Successfully logged out")),
         data: None,
-        status: StatusCode::INTERNAL_SERVER_ERROR
+        status: StatusCode::OK
     }
 }
 
@@ -209,9 +209,6 @@ pub async fn token<'a>(State(app_state): State<Arc<AppState>>, Extension(token):
         Ok(user) => user,
         Err(_) => return (StatusCode::FORBIDDEN, axum::Json::from(json!({"message": "Could not get user"})).to_string())
     };
-    info!("token 3.5");
-
-    info!("token 4");
 
     let session_manager = prepare_user_session_manager(&user, token.clone(), app_state.clone()).await;
     info!("token 4.5");
@@ -219,6 +216,10 @@ pub async fn token<'a>(State(app_state): State<Arc<AppState>>, Extension(token):
     let mut p2p_state = app_state.p2p_connections.lock().await;
     p2p_state.insert(token.clone().sub, session_manager);
     info!("token 5");
+
+    let token = headers.get("authorization").unwrap().to_owned();
+    let token = token.to_str().unwrap();
+    let token = token.replace("Bearer ", "");
 
     (StatusCode::OK, axum::Json::from(json!({"token": token})).to_string())
 }

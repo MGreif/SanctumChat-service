@@ -1,6 +1,7 @@
 use diesel::{r2d2::{self, Pool, ConnectionManager}, PgConnection};
 use dotenv::dotenv;
 use futures::lock::Mutex;
+use tracing::info;
 use std::{env, sync::Arc, collections::HashMap};
 use tokio::sync::broadcast;
 
@@ -28,13 +29,12 @@ impl AppState {
             },
             Some(user) => user,
         };
-        
-        session_manager.lock().await.notify_offline().await;
-        drop(p2p);
+                
+        session_manager.lock().await.notify_offline(&p2p).await;
         // Remove user from logged in sessions
-        
+        drop(p2p);
         let friends = self.get_friends_in_p2p(&user_id).await;
-        // Remoe user from currently logged in friends 'active_friends'
+        // Remove user from currently logged in friends 'active_friends'
         for (_, friend_user_session_manager) in friends {
             friend_user_session_manager.lock().await.remove_friend(&user_id).await;
         }
@@ -43,23 +43,28 @@ impl AppState {
 
     pub async fn remove_expired_p2p_sessions(&self) {
         let mut p2p = self.p2p_connections.lock().await;
-        for (user_id, sm) in p2p.clone().iter() {
+        let p2pclone = p2p.clone();
+        let mut to_be_removed: Vec<&String> = Vec::new();
+        for (user_id, sm) in p2pclone.iter() {
             let sm = sm.lock().await;
             let token_is_expired = match check_token_expiration(sm.token.clone()) {
                 Err(_) => true,
                 Ok(_) => false
             };
 
-            if (!token_is_expired) {
+            if !token_is_expired {
                 continue;
             }
-
+            info!("Removed {} from p2p sessions due to session expiration", user_id);
             // Token is expired
 
+            to_be_removed.push(user_id);
+        }
+
+        for user_id in to_be_removed {
             let (_, sm) = p2p.remove_entry(user_id).expect("Could not remove p2p entry");
             let sm = sm.lock().await;
-
-            sm.notify_offline().await;
+            sm.notify_offline(&p2p).await;
             sm.send_direct_message(crate::handler::ws_handler::SocketMessage::SocketMessageNotification(SocketMessageNotification {
                 message: String::from("Your session expired"),
                 title: String::from("Important"),
@@ -72,13 +77,15 @@ impl AppState {
         let mut pool = self.db_pool.get().expect("[get_friends] Could not get connection pool");
         let friends_from_db = get_friends_for_user_from_db(& mut pool, client_uuid).await;
         let mut friends: HashMap<String, Arc<Mutex<SessionManager>>> = HashMap::new();
-
+        info!("1");
         let p2p_connections = self.p2p_connections.lock().await;
+        info!("2");
 
         // Currently just iterating over entire p2p_state
         for user in friends_from_db.iter() {
     
             // Get sessionmanager from p2p pool
+            info!("3");
     
             let session_manager = match p2p_connections.get(&user.username) {
                 Some(sm) => sm,
@@ -86,7 +93,9 @@ impl AppState {
             };
             friends.insert(user.username.clone(),session_manager.to_owned());
         }
+        info!("4");
     
+        drop(p2p_connections);
         friends
     
     }

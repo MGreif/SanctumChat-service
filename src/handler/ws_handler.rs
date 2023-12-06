@@ -89,14 +89,17 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
     let is_validated_result = validate_user_token(query.token.clone(), &app_state_orig.config.env.HASHING_KEY.as_bytes());
     match is_validated_result {
         Err(_) => {
-            sender.lock().await.send(Message::Text(String::from("Not authorized"))).await.unwrap();
+            match sender.lock().await.send(Message::Text(String::from("Not authorized"))).await {
+                Err(err) => info!("{}", err),
+                Ok(_) => {}
+            };
             return
 
         },
         Ok(_) => {}
     }
 
-    let token = token_into_typed(&query.token, app_state_orig.config.env.HASHING_KEY.as_bytes().clone()).unwrap();
+    let token = token_into_typed(&query.token, app_state_orig.config.env.HASHING_KEY.as_bytes()).unwrap();
 
     let p2p_connection = app_state_orig.p2p_connections.lock().await;
     let client_session = p2p_connection.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await;
@@ -144,11 +147,9 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
     // Spawn a task that takes messages from the websocket, prepends the user
     // name, and sends them to all broadcast subscribers.
 
-    let app_state_clone2 = app_state.clone();
     let app_state_clone = app_state.clone();
 
     let token = token.clone();
-    let token2 = token.clone();
 
     let mut receive_task = tokio::spawn(async move {
         while let Some(Ok(Message::Text(text))) = receiver.next().await {
@@ -159,9 +160,7 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
 
             // Get fresh connection to get latest state
             let client_session = app_state_clone.p2p_connections.lock().await.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await.clone();
-            let friends = client_session.active_friends.lock().await;
             let recipient = message.recipient.unwrap();
-            info!("[name: {}]{} - friends {:?} - {}", token.name, &recipient, friends, friends.len());
 
             let message = SocketMessageDirect { sender: Some(token.sub.clone()), recipient: Some(recipient.clone()), message: message.message.clone(), message_self_encrypted: message.message_self_encrypted.clone() };
             let message_clone = message.clone();
@@ -181,9 +180,8 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
 
             client_session.send_direct_message(SocketMessage::SocketMessageDirect(message.clone())).await;
 
-            let p2p = app_state_clone.p2p_connections.lock().await;
-            let recipient_session_manager = p2p.get(&recipient);
-
+            let p2p = app_state_clone.p2p_connections.lock().await.clone();
+            let recipient_session_manager = p2p.get(&recipient).clone();
             match recipient_session_manager {
                 None => {},
                 Some(sm) => {
@@ -197,21 +195,21 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
     tokio::select! {
         _ = (&mut receive_task) => {
             sender_receive_task.abort();
-            let own_p2p = app_state_clone2.p2p_connections.lock().await;
-            let own_p2p = own_p2p.get(&token2.sub.clone());
-            if let Some(sm) = own_p2p {
-                let own_p2p = sm.lock().await;
-                own_p2p.notify_offline().await;
-            };
+         //   let own_p2p = app_state_clone2.p2p_connections.lock().await;
+         //   let own_p2p = own_p2p.get(&token2.sub.clone());
+           // if let Some(sm) = own_p2p {
+              //  let own_p2p = sm.lock().await;
+              //  own_p2p.notify_offline().await;
+           // };
         },
         _ = (&mut sender_receive_task) => {
             receive_task.abort();
-            let own_p2p = app_state_clone2.p2p_connections.lock().await;
-            let own_p2p = own_p2p.get(&token2.sub.clone());
-            if let Some(sm) = own_p2p {
-                let own_p2p = sm.lock().await;
-                own_p2p.notify_offline().await;
-            };
+           // let own_p2p = app_state_clone2.p2p_connections.lock().await;
+           // let own_p2p = own_p2p.get(&token2.sub.clone());
+            //if let Some(sm) = own_p2p {
+              //  let own_p2p = sm.lock().await;
+              //  own_p2p.notify_offline().await;
+          //  };
         },
     };
 }

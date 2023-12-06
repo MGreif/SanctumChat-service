@@ -1,6 +1,7 @@
 use hmac::{Hmac, Mac};
 use jwt::{SignWithKey, VerifyWithKey};
 use sha2::Sha256;
+use tracing::info;
 use std::{collections::BTreeMap, time::{SystemTime, UNIX_EPOCH, Duration}, ops::Add};
 use serde::{Deserialize, Serialize};
 
@@ -26,9 +27,11 @@ pub fn encrypt_user_token(user: UserDTO, secret_key: &[u8]) -> String {
     let key: Hmac<Sha256> = Hmac::new_from_slice(secret_key).unwrap();
     let mut claims: BTreeMap<&str, String> = BTreeMap::new();
     let since_the_epoch = get_time_since_epoch();
-    let jwt_valid_for = Duration::new(60 * 60, 0);
+    let jwt_valid_for = Duration::new(30, 0);
 
     let jwt_expires = since_the_epoch.add(jwt_valid_for);
+    info!("{} -", jwt_expires.clone().as_secs_f32());
+
     claims.insert("sub", user.username.to_string());
     claims.insert("name", user.name);
     claims.insert("exp", jwt_expires.as_secs_f32().to_string());
@@ -43,7 +46,7 @@ pub fn validate_user_token(token: String, secret_key: &[u8]) -> Result<bool, Str
     let claims_wrapped: Result<BTreeMap<String, String>, jwt::Error> = token.verify_with_key(&key);
 
     match claims_wrapped {
-        Err(_) => return Err("Error validating user token".to_owned()),
+        Err(err) => return Err(format!("Error validating user token - {}", err)),
         Ok(res) => res,
     };
 
@@ -62,7 +65,8 @@ pub fn validate_user_token(token: String, secret_key: &[u8]) -> Result<bool, Str
 
 pub fn check_token_expiration(token: Token) -> Result<(), String> {
     let time_since_epoch = get_time_since_epoch();
-    if time_since_epoch.gt(&token.exp) {
+    info!("{} - {}", time_since_epoch.clone().as_secs_f32(), token.clone().exp.as_secs_f32());
+    if time_since_epoch.as_secs_f32().gt(&token.exp.as_secs_f32()) {
         return Err(String::from("Token is expired"));
     };
     return Ok(())

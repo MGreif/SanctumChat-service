@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use diesel::expression::is_aggregate::No;
 use futures::lock::Mutex;
 use tracing::info;
 use crate::{models::UserDTO, handler::ws_handler::{SocketMessage, SocketMessageStatusChange, EEvent}, config::AppState, utils::jwt::Token};
@@ -41,10 +42,12 @@ impl<'a> SessionManager {
         }
     }
 
-    pub async fn notify_offline(&self) {
+    pub async fn notify_offline(&self, p2p: &futures::lock::MutexGuard<'_, std::collections::HashMap<String, Arc<Mutex<SessionManager>>>>) {
         for friend_id in self.active_friends.lock().await.iter() {
-            let friend_session_manager = self.app_state.p2p_connections.lock().await;
-            let friend_session_manager = friend_session_manager.get(friend_id).unwrap().lock().await;
+            let friend_session_manager = match p2p.get(friend_id) {
+                Some(sm) => sm.lock().await,
+                None => return
+            };
             friend_session_manager.send_direct_message(
                 SocketMessage::SocketMessageStatusChange(SocketMessageStatusChange { status: EEvent::OFFLINE, user_id: self.user.username.clone() })
             ).await;
@@ -53,38 +56,23 @@ impl<'a> SessionManager {
 
     pub async fn remove_friend(&self, friend_id: &String) {
         let mut friends = self.active_friends.lock().await;
-        let index = friends.iter().position(|x| *x == friend_id.to_owned()).unwrap();
+        let index = match friends.iter().position(|x| *x == friend_id.to_owned()) {
+            None => return,
+            Some(us) => us
+        };
         friends.remove(index);
     }
 
-    pub async fn add_friend(&self, friend_id: String) {
-        let mut friends = self.active_friends.lock().await;
-        friends.push(friend_id);
-    }
+    pub async fn add_friend(&self, friend_username: String) {
+        let mut active_friends = self.active_friends.lock().await;
+        let index = active_friends.iter().position(|r| r == &friend_username);
 
-    pub async fn add_self_to_friend(&self, friend_session_manager: SessionManager) {
-        friend_session_manager.active_friends.lock().await.push(self.user.username.clone());
-    }
-
-    pub async fn get_friends(&self) -> futures::lock::MutexGuard<'_, Vec<String>> {
-        self.active_friends.lock().await
-    }
-
-}
-
-#[derive(Debug, Clone)]
-pub struct FriendSessionManager {
-    pub socket: broadcast::Sender<SocketMessage>
-}
-
-impl FriendSessionManager {
-    pub async fn send_direct_message(&self, message: SocketMessage) {
-        info!("{:?}", self.socket);
-        self.socket.send(message).expect("Could not send message");
+        match index {
+            None => { active_friends.push(friend_username) },
+            Some(_) => {},
+        };
     }
 }
-
-
 
 pub async fn update_user_friends<'a>(user: &UserDTO, app_state: Arc<AppState>) {
     let friends_in_p2p_state = app_state.get_friends_in_p2p(&user.username).await; // This has to be exchanged with an iteration and filtering only the p2p_connections that are the friends
@@ -96,6 +84,8 @@ pub async fn update_user_friends<'a>(user: &UserDTO, app_state: Arc<AppState>) {
 
         // Insert self into friends of friends session manager
         let friend_session = friend_session_manager.lock().await;
+        friend_session.add_friend(user.username.clone()).await;
+
         let mut active_friends = friend_session.active_friends.lock().await;
         let index = active_friends.iter().position(|r| r == &user.username);
 

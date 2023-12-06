@@ -1,8 +1,9 @@
 use core::time;
 use std::sync::Arc;
-use axum::{middleware, http::Method};
+use axum::{middleware, http::{Method, StatusCode, Error}, ServiceExt, error_handling::HandleErrorLayer, response::IntoResponse, BoxError};
 use config::{EnvConfig, AppState};
 use diesel::r2d2::{ConnectionManager, Pool};
+use helper::errors::HTTPResponse;
 use tower_http::cors::{CorsLayer, Any, AllowHeaders};
 use std::net::SocketAddr;
 use axum::{
@@ -56,14 +57,14 @@ async fn main() {
     });
 
     let app = Router::new()
-        .route("/logout", post(user_handler::logout))
         .route("/messages", get(message_handler::get_messages))
         .route("/friends", get(friend_handler::get_friends))
         .route("/friend-requests", get(friend_handler::get_friend_requests).post(friend_handler::create_friend_request))
         .route("/friend-requests/:uuid", patch(friend_handler::patch_friend_request))
-        .route_layer(middleware::from_fn_with_state(app_state.clone(), middlewares::auth::authBearer))
-        .route_layer(middleware::from_fn_with_state(app_state.clone(), middlewares::token::token_mw))
         .route("/token", post( user_handler::token))
+        .route_layer(middleware::from_fn_with_state(app_state.clone(), middlewares::auth::authBearer))
+        .route("/logout", post(user_handler::logout))
+        .route_layer(middleware::from_fn_with_state(app_state.clone(), middlewares::token::token_mw))
         .route("/users", get(user_handler::get_users).post(user_handler::create_user))
         .route("/login", post( user_handler::login))
         .route("/ws", get(handler::ws_handler::ws_handler))
@@ -77,3 +78,11 @@ async fn main() {
     tracing::debug!("listening on {}", addr);
     axum::serve(listener, app).await.unwrap();
 }
+
+pub async fn error_handler(err: BoxError) -> impl IntoResponse {
+    return HTTPResponse::<()> {
+        data: None,
+        message: Some(err.to_string()),
+        status: StatusCode::INTERNAL_SERVER_ERROR
+    }
+ }
