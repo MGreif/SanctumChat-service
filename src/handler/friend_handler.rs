@@ -93,10 +93,7 @@ pub async fn create_friend_request(State(app_state): State<Arc<AppState>>, token
     let receiver_session_manager = receiver_session_manager.get(&recipient.clone());
     if let Some(sm) = receiver_session_manager {
         let sm = sm.lock().await;
-        let friend_request_message = SocketMessageFriendRequest {
-            friend_request_id: new_request.id,
-            sender_username: token.sub.clone()
-        };
+        let friend_request_message = SocketMessageFriendRequest::new(new_request.id, token.sub.clone());
         sm.send_direct_message(SocketMessage::SocketMessageFriendRequest(friend_request_message)).await;
     };
 

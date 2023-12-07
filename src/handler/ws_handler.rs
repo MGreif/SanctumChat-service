@@ -29,14 +29,39 @@ pub struct SocketMessageDirect {
     pub recipient: Option<String>,
     pub sender: Option<String>,
     pub message: String,
-    pub message_self_encrypted: String
+    pub message_self_encrypted: String,
+    pub TYPE: String
+}
+
+impl SocketMessageDirect {
+    pub fn new(sender: Option<String>, recipient: Option<String>, message: String, message_self_encrypted: String) -> SocketMessageDirect {
+        SocketMessageDirect { 
+            message,
+            message_self_encrypted,
+            recipient,
+            sender,
+            TYPE: String::from("SOCKET_MESSAGE_DIRECT")
+         }
+    }
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub struct SocketMessageNotification {
     pub message: String,
     pub title: String,
-    pub status: String
+    pub status: String,
+    pub TYPE: String
+}
+
+impl SocketMessageNotification {
+    pub fn new(status: String, title: String, message: String) -> SocketMessageNotification {
+        SocketMessageNotification { 
+            message,
+            status,
+            title,
+            TYPE: String::from("SOCKET_MESSAGE_NOTIFICATION")
+         }
+    }
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, Debug)]
@@ -49,23 +74,62 @@ pub enum EEvent {
 #[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]
 pub struct SocketMessageEvent {
     event: EEvent,
+    pub TYPE: String
+}
+
+impl SocketMessageEvent {
+    pub fn new(event: EEvent) -> SocketMessageEvent {
+        SocketMessageEvent { event: EEvent::ONLINE, TYPE: String::from("SOCKET_MESSAGE_EVENT") }
+    }
 }
 
 #[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]
 pub struct SocketMessageOnlineUsers {
-    pub online_users: Vec<String>
+    pub online_users: Vec<String>,
+    pub TYPE: String
+}
+
+impl SocketMessageOnlineUsers {
+    pub fn new(online_users: Vec<String>) -> SocketMessageOnlineUsers {
+        SocketMessageOnlineUsers { 
+            online_users,
+            TYPE: String::from("SOCKET_MESSAGE_ONLINE_USERS")
+         }
+    }
 }
 
 #[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]
 pub struct SocketMessageStatusChange {
     pub status: EEvent,
-    pub user_id: String
+    pub user_id: String,
+    pub TYPE: String
+}
+
+impl SocketMessageStatusChange {
+    pub fn new(status: EEvent, user_id: String) -> SocketMessageStatusChange {
+        SocketMessageStatusChange { 
+            status,
+            user_id,
+            TYPE: String::from("SOCKET_MESSAGE_STATUS_CHANGE")
+         }
+    }
 }
 
 #[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]
 pub struct SocketMessageFriendRequest {
     pub sender_username: String,
-    pub friend_request_id: Uuid
+    pub friend_request_id: Uuid,
+    pub TYPE: String
+}
+
+impl SocketMessageFriendRequest {
+    pub fn new(friend_request_id: Uuid, sender_username: String) -> SocketMessageFriendRequest {
+        SocketMessageFriendRequest { 
+            friend_request_id,
+            sender_username,
+            TYPE: String::from("SOCKET_MESSAGE_FRIEND_REQUEST")
+         }
+    }
 }
 
 #[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]
@@ -122,7 +186,7 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
 
 
 
-    let mess = SocketMessage::SocketMessageOnlineUsers(SocketMessageOnlineUsers { online_users: online_friends });
+    let mess = SocketMessage::SocketMessageOnlineUsers(SocketMessageOnlineUsers::new(online_friends));
     sender.lock().await.send(Message::Text(to_string(&mess).unwrap())).await.expect("Failed sending joining message");
 
     sender.lock().await.send(Message::Text(format!("You joined the channel"))).await.expect("Failed sending joining message");
@@ -159,7 +223,7 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
             let client_session = app_state_clone.p2p_connections.lock().await.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await.clone();
             let recipient = message.recipient.unwrap();
 
-            let message = SocketMessageDirect { sender: Some(token.sub.clone()), recipient: Some(recipient.clone()), message: message.message.clone(), message_self_encrypted: message.message_self_encrypted.clone() };
+            let message = SocketMessageDirect::new(Some(token.sub.clone()), Some(recipient.clone()), message.message.clone(), message.message_self_encrypted.clone());
             let message_clone = message.clone();
             // Save message in db
             let message_db = models::Message {

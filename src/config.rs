@@ -21,25 +21,31 @@ impl AppState {
          AppState { db_pool: pool, broadcast: tx, config: config, p2p_connections: Mutex::new(HashMap::new()) }
     }
 
-    pub async  fn logout_user(&self, user_id: &String) -> Result<(),String> {
+    pub async fn insert_into_p2p(&self, session_manager: SessionManager) {
         let mut p2p = self.p2p_connections.lock().await;
-        let (_, session_manager) = match p2p.remove_entry(user_id) {
+        let username = &session_manager.clone().user.username;
+        let session_manager = Arc::new(Mutex::new(session_manager));
+        p2p.insert(username.to_owned(), session_manager);
+    }
+
+    pub async fn remove_from_p2p(&self, username: &String) -> Result<Arc<Mutex<SessionManager>>, String> {
+        let mut p2p = self.p2p_connections.lock().await;
+        info!("1111");
+        let session_manager = match p2p.remove_entry(username) {
             None => {
                 return Err(String::from("user not p2p pool"))
             },
-            Some(user) => user,
+            Some(user) => user.1,
         };
-        drop(p2p);
-        session_manager.lock().await.notify_offline().await;
-        // Remove user from logged in sessions
-        Ok(())
+        Ok(session_manager.clone())
     }
 
     pub async fn remove_expired_p2p_sessions(&self) {
-        let mut p2p = self.p2p_connections.lock().await;
-        let p2pclone = p2p.clone();
+        let p2p = self.p2p_connections.lock().await.clone();
+        let p2p = p2p.iter()
+        ;
         let mut to_be_removed: Vec<&String> = Vec::new();
-        for (user_id, sm) in p2pclone.iter() {
+        for (user_id, sm) in p2p {
             let sm = sm.lock().await;
             let token_is_expired = match check_token_expiration(sm.token.clone()) {
                 Err(_) => true,
@@ -56,14 +62,16 @@ impl AppState {
         }
 
         for user_id in to_be_removed {
-            let (_, sm) = p2p.remove_entry(user_id).expect("Could not remove p2p entry");
-            let sm = sm.lock().await;
-            sm.notify_offline().await;
-            sm.send_direct_message(crate::handler::ws_handler::SocketMessage::SocketMessageNotification(SocketMessageNotification {
-                message: String::from("Your session expired"),
-                title: String::from("Important"),
-                status: String::from("error")
-            })).await;
+            info!("{} removing", user_id);
+            let session_manager = self.remove_from_p2p(&user_id).await.expect("Could not remove from p2p");
+            info!("{} removing2", user_id);
+        
+            let session_manager = session_manager.lock().await;
+            info!("{} notifzing offline", user_id);
+            session_manager.notify_offline().await;
+        
+            info!("{} sending expiration message", user_id);
+            session_manager.send_direct_message(crate::handler::ws_handler::SocketMessage::SocketMessageNotification(SocketMessageNotification::new(String::from("error"), String::from("Important"), String::from("Your session expired")))).await;
         }
     }
 

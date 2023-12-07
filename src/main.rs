@@ -49,7 +49,7 @@ async fn main() {
     let app_state_clone = app_state.clone();
 
     tokio::spawn(async move {
-        let mut interval = tokio::time::interval(time::Duration::from_secs(60));
+        let mut interval = tokio::time::interval(time::Duration::from_secs(15));
         loop {
             interval.tick().await;
             app_state_clone.remove_expired_p2p_sessions().await;

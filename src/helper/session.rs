@@ -34,7 +34,7 @@ impl<'a> SessionManager {
             info!("{friend_id}");
             let friend_session_manager = friend_session_manager.lock().await;
             friend_session_manager.send_direct_message(
-                SocketMessage::SocketMessageStatusChange(SocketMessageStatusChange { status: EEvent::ONLINE, user_id: self.user.username.clone() })
+                SocketMessage::SocketMessageStatusChange(SocketMessageStatusChange::new(EEvent::ONLINE, self.user.username.clone()))
             ).await;
         }
     }
@@ -45,7 +45,7 @@ impl<'a> SessionManager {
             info!("{friend_id}");
             let friend_session_manager = friend_session_manager.lock().await;
             friend_session_manager.send_direct_message(
-                SocketMessage::SocketMessageStatusChange(SocketMessageStatusChange { status: EEvent::OFFLINE, user_id: self.user.username.clone() })
+                SocketMessage::SocketMessageStatusChange(SocketMessageStatusChange::new(EEvent::OFFLINE, self.user.username.clone()))
             ).await;
         }
     }

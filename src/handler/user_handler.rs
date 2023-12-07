@@ -137,14 +137,17 @@ pub struct LoginDTO {
 }
 
 pub async fn logout<'a>(State(state): State<Arc<AppState>>, token: Extension<Token>) -> impl IntoResponse {
-    match state.logout_user(&token.sub).await {
+
+    let session_manager = match state.remove_from_p2p(&token.sub).await {
+        Ok(sm) => sm,
         Err(err) => return HTTPResponse::<()> {
             message: Some(err),
             data: None,
             status: StatusCode::INTERNAL_SERVER_ERROR
         },
-        Ok(_) => {}
     };
+
+    session_manager.lock().await.notify_offline().await;
 
     HTTPResponse::<()> {
         message: Some(String::from("Successfully logged out")),
@@ -194,9 +197,7 @@ pub async fn login<'a>(State(state): State<Arc<AppState>>, Json(body): Json<Logi
 
     let session_manager = SessionManager::new(user.clone(), token, state.clone());
     session_manager.notify_online().await;
-    let mut p2p_state = state.p2p_connections.lock().await;
-    let session_manager = Arc::new(Mutex::new(session_manager));
-    p2p_state.insert(user.username.clone(), session_manager);
+    state.insert_into_p2p(session_manager).await;
 
 
     headers.insert(SET_COOKIE, format!("session={}; Max-Age=2592000; Path=/; SameSite=None", session_token).parse().unwrap());
@@ -213,10 +214,9 @@ pub async fn token<'a>(State(app_state): State<Arc<AppState>>, Extension(token):
     };
 
     let session_manager = SessionManager::new(user.clone(), token, app_state.clone());
+    app_state.insert_into_p2p(session_manager).await;
+    
 
-    let mut p2p_state = app_state.p2p_connections.lock().await;
-    let session_manager = Arc::new(Mutex::new(session_manager));
-    p2p_state.insert(user.username.clone(), session_manager);
     info!("token 5");
 
     let token = headers.get("authorization").unwrap().to_owned();
