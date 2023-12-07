@@ -193,9 +193,7 @@ pub async fn login<'a>(State(state): State<Arc<AppState>>, Json(body): Json<Logi
     let token = token_into_typed(&session_token, state.config.env.HASHING_KEY.as_bytes()).expect("Could not parse token");
 
     let session_manager = SessionManager::new(user.clone(), token, state.clone());
-    session_manager.update_active_friends_from_p2p_friends().await;
-    session_manager.update_user_friends().await;
-
+    session_manager.notify_online().await;
     let mut p2p_state = state.p2p_connections.lock().await;
     let session_manager = Arc::new(Mutex::new(session_manager));
     p2p_state.insert(user.username.clone(), session_manager);
@@ -215,8 +213,6 @@ pub async fn token<'a>(State(app_state): State<Arc<AppState>>, Extension(token):
     };
 
     let session_manager = SessionManager::new(user.clone(), token, app_state.clone());
-    session_manager.update_active_friends_from_p2p_friends().await;
-    session_manager.update_user_friends().await;
 
     let mut p2p_state = app_state.p2p_connections.lock().await;
     let session_manager = Arc::new(Mutex::new(session_manager));

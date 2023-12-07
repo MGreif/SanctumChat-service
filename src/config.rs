@@ -23,21 +23,15 @@ impl AppState {
 
     pub async  fn logout_user(&self, user_id: &String) -> Result<(),String> {
         let mut p2p = self.p2p_connections.lock().await;
-        let (user_id, session_manager) = match p2p.remove_entry(user_id) {
+        let (_, session_manager) = match p2p.remove_entry(user_id) {
             None => {
                 return Err(String::from("user not p2p pool"))
             },
             Some(user) => user,
         };
-                
-        session_manager.lock().await.notify_offline(&p2p).await;
-        // Remove user from logged in sessions
         drop(p2p);
-        let friends = self.get_friends_in_p2p(&user_id).await;
-        // Remove user from currently logged in friends 'active_friends'
-        for (_, friend_user_session_manager) in friends {
-            friend_user_session_manager.lock().await.remove_friend(&user_id).await;
-        }
+        session_manager.lock().await.notify_offline().await;
+        // Remove user from logged in sessions
         Ok(())
     }
 
@@ -64,7 +58,7 @@ impl AppState {
         for user_id in to_be_removed {
             let (_, sm) = p2p.remove_entry(user_id).expect("Could not remove p2p entry");
             let sm = sm.lock().await;
-            sm.notify_offline(&p2p).await;
+            sm.notify_offline().await;
             sm.send_direct_message(crate::handler::ws_handler::SocketMessage::SocketMessageNotification(SocketMessageNotification {
                 message: String::from("Your session expired"),
                 title: String::from("Important"),
