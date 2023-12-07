@@ -95,7 +95,6 @@ impl AppState {
         }
         info!("4");
     
-        drop(p2p_connections);
         friends
     
     }

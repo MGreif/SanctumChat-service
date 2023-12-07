@@ -1,9 +1,10 @@
 use std::sync::Arc;
 use axum::{extract::{Json, Query, State}, response::IntoResponse, http::{HeaderMap, header::{SET_COOKIE, self}, StatusCode}, Extension};
+use futures::lock::Mutex;
 use tracing::info;
-use crate::{schema::users::dsl::*, utils::jwt::Token};
+use crate::{schema::users::dsl::*, utils::jwt::Token, helper::session::SessionManager};
 use serde_json::json;
-use crate::{config::AppState, models::{UserDTO, self}, schema::{self, users::{self, all_columns}}, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR, utils::jwt::{hash_string, validate_user_token, token_into_typed}, helper::session::{prepare_user_session_manager, update_user_friends}};
+use crate::{config::AppState, models::{UserDTO, self}, schema::{self, users::{self, all_columns}}, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR, utils::jwt::{hash_string, token_into_typed}};
 use diesel::prelude::*;
 use diesel::sql_types::Text;
 use crate::helper::errors::HTTPResponse;
@@ -190,11 +191,14 @@ pub async fn login<'a>(State(state): State<Arc<AppState>>, Json(body): Json<Logi
 
     let session_token = encrypt_user_token(user.clone(), state.config.env.HASHING_KEY.as_bytes());
     let token = token_into_typed(&session_token, state.config.env.HASHING_KEY.as_bytes()).expect("Could not parse token");
-    let session_manager = prepare_user_session_manager(&user, token, state.clone()).await;
-    update_user_friends(&user, state.clone()).await;
+
+    let session_manager = SessionManager::new(user.clone(), token, state.clone());
+    session_manager.update_active_friends_from_p2p_friends().await;
+    session_manager.update_user_friends().await;
 
     let mut p2p_state = state.p2p_connections.lock().await;
-    p2p_state.insert(user.username.clone(), session_manager.to_owned());
+    let session_manager = Arc::new(Mutex::new(session_manager));
+    p2p_state.insert(user.username.clone(), session_manager);
 
 
     headers.insert(SET_COOKIE, format!("session={}; Max-Age=2592000; Path=/; SameSite=None", session_token).parse().unwrap());
@@ -210,11 +214,13 @@ pub async fn token<'a>(State(app_state): State<Arc<AppState>>, Extension(token):
         Err(_) => return (StatusCode::FORBIDDEN, axum::Json::from(json!({"message": "Could not get user"})).to_string())
     };
 
-    let session_manager = prepare_user_session_manager(&user, token.clone(), app_state.clone()).await;
-    info!("token 4.5");
-    update_user_friends(&user, app_state.clone()).await;
+    let session_manager = SessionManager::new(user.clone(), token, app_state.clone());
+    session_manager.update_active_friends_from_p2p_friends().await;
+    session_manager.update_user_friends().await;
+
     let mut p2p_state = app_state.p2p_connections.lock().await;
-    p2p_state.insert(token.clone().sub, session_manager);
+    let session_manager = Arc::new(Mutex::new(session_manager));
+    p2p_state.insert(user.username.clone(), session_manager);
     info!("token 5");
 
     let token = headers.get("authorization").unwrap().to_owned();

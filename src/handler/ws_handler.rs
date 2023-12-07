@@ -106,21 +106,18 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
 
 
     let mut client_rx = client_session.user_socket.subscribe();
-
+    drop(client_session);
+    drop(p2p_connection);
 
 
     // get online friends at client start/initialization
-    let friends = client_session.active_friends.lock().await;
+    let friends = app_state_orig.get_friends_in_p2p(&token.sub).await;
 
     let mut online_friends: Vec<String> = vec![];
 
-    for friend_id in friends.iter() {
+    for (friend_id, _) in friends {
         online_friends.push(friend_id.to_owned());
     }
-
-    drop(friends);
-    drop(client_session);
-    drop(p2p_connection);
 
 
 
