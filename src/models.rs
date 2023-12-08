@@ -28,6 +28,8 @@ pub struct Message {
     pub sent_at: SystemTime,
     pub content: String,
     pub content_self_encrypted: String,
+    pub content_signature: String,
+    pub content_self_encrypted_signature: String,
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize, diesel::Queryable, diesel::Selectable, diesel::Insertable, Clone)]

@@ -33,6 +33,10 @@ diesel::table! {
         content -> Varchar,
         #[max_length = 1024]
         content_self_encrypted -> Varchar,
+        #[max_length = 1024]
+        content_signature -> Varchar,
+        #[max_length = 1024]
+        content_self_encrypted_signature -> Varchar,
     }
 }
 

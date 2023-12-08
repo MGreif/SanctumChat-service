@@ -29,18 +29,22 @@ pub struct SocketMessageDirect {
     pub recipient: Option<String>,
     pub sender: Option<String>,
     pub message: String,
+    pub message_signature: String,
     pub message_self_encrypted: String,
-    pub TYPE: String
+    pub message_self_encrypted_signature: String,
+    pub TYPE: Option<String>
 }
 
 impl SocketMessageDirect {
-    pub fn new(sender: Option<String>, recipient: Option<String>, message: String, message_self_encrypted: String) -> SocketMessageDirect {
+    pub fn new(sender: Option<String>, recipient: Option<String>, message: String, message_signature: String, message_self_encrypted: String, message_self_encrypted_signature: String) -> SocketMessageDirect {
         SocketMessageDirect { 
             message,
+            message_signature,
             message_self_encrypted,
+            message_self_encrypted_signature,
             recipient,
             sender,
-            TYPE: String::from("SOCKET_MESSAGE_DIRECT")
+            TYPE: Some(String::from("SOCKET_MESSAGE_DIRECT"))
          }
     }
 }
@@ -149,7 +153,6 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
     let sender = Arc::new(Mutex::new(sender));
 
     let app_state_orig = app_state.clone();
-
     let is_validated_result = validate_user_token(query.token.clone(), &app_state_orig.config.env.HASHING_KEY.as_bytes());
     match is_validated_result {
         Err(_) => {
@@ -173,7 +176,6 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
     drop(client_session);
     drop(p2p_connection);
 
-
     // get online friends at client start/initialization
     let friends = app_state_orig.get_friends_in_p2p(&token.sub).await;
 
@@ -182,9 +184,6 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
     for (friend_id, _) in friends {
         online_friends.push(friend_id.to_owned());
     }
-
-
-
 
     let mess = SocketMessage::SocketMessageOnlineUsers(SocketMessageOnlineUsers::new(online_friends));
     sender.lock().await.send(Message::Text(to_string(&mess).unwrap())).await.expect("Failed sending joining message");
@@ -223,12 +222,22 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
             let client_session = app_state_clone.p2p_connections.lock().await.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await.clone();
             let recipient = message.recipient.unwrap();
 
-            let message = SocketMessageDirect::new(Some(token.sub.clone()), Some(recipient.clone()), message.message.clone(), message.message_self_encrypted.clone());
+            let message = SocketMessageDirect::new(
+                Some(token.sub.clone()),
+                Some(recipient.clone()),
+                message.message.clone(),
+                message.message_signature.clone(),
+                message.message_self_encrypted.clone(),
+                message.message_self_encrypted_signature.clone()
+            );
+
             let message_clone = message.clone();
             // Save message in db
             let message_db = models::Message {
                 content: message_clone.message,
+                content_signature: message_clone.message_signature,
                 content_self_encrypted: message_clone.message_self_encrypted,
+                content_self_encrypted_signature: message_clone.message_self_encrypted_signature,
                 id: Uuid::new_v4(),
                 recipient: recipient.clone(),
                 sender: token.sub.clone(),

@@ -27,7 +27,7 @@ pub fn encrypt_user_token(user: UserDTO, secret_key: &[u8]) -> String {
     let key: Hmac<Sha256> = Hmac::new_from_slice(secret_key).unwrap();
     let mut claims: BTreeMap<&str, String> = BTreeMap::new();
     let since_the_epoch = get_time_since_epoch();
-    let jwt_valid_for = Duration::new(30, 0);
+    let jwt_valid_for = Duration::new(15*60, 0);
 
     let jwt_expires = since_the_epoch.add(jwt_valid_for);
     info!("{} -", jwt_expires.clone().as_secs_f32());
