@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use futures::lock::Mutex;
 
 use crate::{config::AppState, utils::jwt::Token, handler::ws_handler::SocketMessage};
 

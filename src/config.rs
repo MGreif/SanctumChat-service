@@ -1,7 +1,7 @@
 use diesel::{r2d2::{self, Pool, ConnectionManager}, PgConnection};
 use dotenv::dotenv;
 use futures::lock::Mutex;
-use tracing::info;
+use tracing::{info, debug};
 use std::{env, sync::Arc, collections::HashMap};
 use tokio::sync::broadcast;
 
@@ -41,7 +41,7 @@ impl AppState {
     }
 
     pub async fn remove_expired_p2p_sessions(&self) {
-        let p2p = self.p2p_connections.lock().await.clone();
+        let p2p = self.p2p_connections.lock().await;
         let p2p = p2p.iter()
         ;
         let mut to_be_removed: Vec<&String> = Vec::new();
@@ -73,6 +73,18 @@ impl AppState {
             info!("{} sending expiration message", user_id);
             session_manager.send_direct_message(crate::handler::ws_handler::SocketMessage::SocketMessageNotification(SocketMessageNotification::new(String::from("error"), String::from("Important"), String::from("Your session expired")))).await;
         }
+    }
+
+    pub async fn remove_user_from_p2p(&self, username: String) {
+        let p2p = self.p2p_connections.lock().await;
+        let own_p2p = p2p.clone();
+        let own_p2p = own_p2p.get(&username);
+        drop(p2p);
+        if let Some(sm) = own_p2p {
+            let sm = &sm.lock().await;
+            info!("Notifying offline for {}", username);
+            sm.notify_offline().await;
+        };
     }
 
     pub async fn get_friends_in_p2p<'a>(&self, client_uuid: &String) -> HashMap<String, Arc<Mutex<SessionManager>>> {

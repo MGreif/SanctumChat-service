@@ -7,7 +7,7 @@ use futures::{sink::SinkExt, stream::StreamExt, lock::Mutex};
 use serde_json::{from_str, to_string, json};
 use tracing::info;
 use uuid::Uuid;
-use crate::{config::AppState, utils::jwt::{validate_user_token, token_into_typed}, handler::socket_handler::ws_receive_handler::{ws_receive_handler, SocketMessageError}};
+use crate::{config::AppState, utils::jwt::{validate_user_token, token_into_typed}, handler::socket_handler::ws_receive_handler::{ws_receive_handler, SocketMessageError}, helper::session::SessionManager};
 
 
 use crate::schema::messages::dsl::messages;
@@ -147,6 +147,7 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
     }
 
     let token = token_into_typed(&query.token, app_state_orig.config.env.HASHING_KEY.as_bytes()).unwrap();
+    let token2 = token.clone();
 
     let p2p_connection = app_state_orig.p2p_connections.lock().await;
     let client_session = p2p_connection.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await;
@@ -189,6 +190,7 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
     // name, and sends them to all broadcast subscribers.
 
     let app_state_clone = app_state.clone();
+    let app_state_clone2 = app_state.clone();
 
     let token = token.clone();
     let mut receive_task = tokio::spawn(async move {
@@ -207,21 +209,11 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
     tokio::select! {
         _ = (&mut receive_task) => {
             sender_receive_task.abort();
-         //   let own_p2p = app_state_clone2.p2p_connections.lock().await;
-         //   let own_p2p = own_p2p.get(&token2.sub.clone());
-           // if let Some(sm) = own_p2p {
-              //  let own_p2p = sm.lock().await;
-              //  own_p2p.notify_offline().await;
-           // };
+           // app_state_clone2.remove_user_from_p2p(token2.sub.clone()).await
         },
         _ = (&mut sender_receive_task) => {
             receive_task.abort();
-           // let own_p2p = app_state_clone2.p2p_connections.lock().await;
-           // let own_p2p = own_p2p.get(&token2.sub.clone());
-            //if let Some(sm) = own_p2p {
-              //  let own_p2p = sm.lock().await;
-              //  own_p2p.notify_offline().await;
-          //  };
+           // app_state_clone2.remove_user_from_p2p(token2.sub.clone()).await
         },
     };
 }
