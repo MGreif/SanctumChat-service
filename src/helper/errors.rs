@@ -1,5 +1,4 @@
 use axum::{response::IntoResponse, http::StatusCode};
-use axum::http::HeaderMap;
 use serde::Serialize;
 use serde_json::json;
 

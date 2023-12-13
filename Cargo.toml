@@ -32,4 +32,5 @@ hex = "0.4.3"
 cookie = "0.18.0"
 axum-util = { version = "0.2.2" }
 tower-http = { version = "0.5.0", features = ["cors"] }
+async-trait = "0.1.74"
 

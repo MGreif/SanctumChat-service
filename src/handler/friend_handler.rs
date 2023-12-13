@@ -5,11 +5,9 @@ use axum::http::StatusCode;
 use diesel::sql_types::{Bool, Text, Uuid, Nullable};
 
 use crate::models::{UserDTO, FriendRequest};
-use crate::schema::users;
 use crate::{config::AppState, utils::jwt::Token};
 use diesel::prelude::*;
 use serde_json::json;
-use tracing::info;
 use crate::handler::ws_handler::{SocketMessage, SocketMessageFriendRequest};
 use crate::helper::errors::HTTPResponse;
 use crate::helper::sql::get_friends_for_user_from_db;

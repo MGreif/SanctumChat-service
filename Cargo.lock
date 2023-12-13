@@ -1500,6 +1500,7 @@ dependencies = [
 name = "rust-websocket-server"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum 0.7.2",
  "axum-util",
  "base64 0.21.5",
