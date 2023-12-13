@@ -7,12 +7,7 @@ use futures::{sink::SinkExt, stream::StreamExt, lock::Mutex};
 use serde_json::{from_str, to_string, json};
 use tracing::info;
 use uuid::Uuid;
-use crate::{config::AppState, utils::jwt::{validate_user_token, token_into_typed}, handler::socket_handler::ws_receive_handler::{ws_receive_handler, SocketMessageError}, helper::session::SessionManager};
-
-
-use crate::schema::messages::dsl::messages;
-use diesel::prelude::*;
-
+use crate::{config::AppState, utils::jwt::{validate_user_token, token_into_typed}, handler::socket_handler::ws_receive_handler::{ws_receive_handler}};
 use super::socket_handler::ws_handle_direct::SocketMessageDirect;
 
 
@@ -190,7 +185,6 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
     // name, and sends them to all broadcast subscribers.
 
     let app_state_clone = app_state.clone();
-    let app_state_clone2 = app_state.clone();
 
     let token = token.clone();
     let mut receive_task = tokio::spawn(async move {

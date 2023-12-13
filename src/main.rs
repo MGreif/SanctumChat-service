@@ -58,6 +58,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/messages", get(message_handler::get_messages))
+        .route("/friends/active", get(friend_handler::get_active_friends))
         .route("/friends", get(friend_handler::get_friends))
         .route("/friend-requests", get(friend_handler::get_friend_requests).post(friend_handler::create_friend_request))
         .route("/friend-requests/:uuid", patch(friend_handler::patch_friend_request))

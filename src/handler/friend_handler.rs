@@ -162,3 +162,13 @@ pub async fn get_friends(State(app_state): State<Arc<AppState>>, token: Extensio
         message: None
     }
 }
+
+pub async fn get_active_friends(State(app_state): State<Arc<AppState>>, token: Extension<Token>) -> impl IntoResponse {
+    let result = app_state.get_friends_in_p2p(&token.sub).await;
+    let result = result.iter().map(|u| u.0.to_owned()).collect::<Vec<String>>();
+    return HTTPResponse::<Vec<String>> {
+        status: StatusCode::OK,
+        data: Some(result),
+        message: None
+    }
+}
