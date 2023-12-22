@@ -18,7 +18,7 @@ use diesel::prelude::*;
 mod config;
 mod handler;
 mod validation;
-use handler::{user_handler, message_handler, friend_handler};
+use handler::{user_handler, message_handler, friend_handler, version_handler};
 
 mod middlewares;
 mod helper;
@@ -69,6 +69,7 @@ async fn main() {
         .route("/users", post(user_handler::create_user))
         .route("/ws", get(handler::ws_handler::ws_handler))
         .route("/login", post( user_handler::login))
+        .route("/version", get(version_handler::version_handler))
         .route_layer(middleware::from_fn(middlewares::cookies::cookie_mw))
         .layer(cors)
         .with_state(app_state)
