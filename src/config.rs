@@ -1,11 +1,11 @@
 use diesel::{r2d2::{self, Pool, ConnectionManager}, PgConnection};
 use dotenv::dotenv;
 use futures::lock::Mutex;
-use tracing::{info, debug};
+use tracing::info;
 use std::{env, sync::Arc, collections::HashMap};
 use tokio::sync::broadcast;
+use crate::{helper::{session::SessionManager, sql::get_friends_for_user_from_db, jwt::check_token_expiration}, handler::ws_handler::SocketMessageNotification};
 
-use crate::{helper::{session::{SessionManager}, sql::get_friends_for_user_from_db}, utils::jwt::check_token_expiration, handler::ws_handler::SocketMessageNotification};
 #[derive(Debug)]
 pub struct AppState {
     pub db_pool: r2d2::Pool<r2d2::ConnectionManager<PgConnection>>,
@@ -30,10 +30,9 @@ impl AppState {
 
     pub async fn remove_from_p2p(&self, username: &String) -> Result<Arc<Mutex<SessionManager>>, String> {
         let mut p2p = self.p2p_connections.lock().await;
-        info!("1111");
         let session_manager = match p2p.remove_entry(username) {
             None => {
-                return Err(String::from("user not p2p pool"))
+                return Err(format!("user not p2p pool: {}", username))
             },
             Some(user) => user.1,
         };
@@ -55,16 +54,14 @@ impl AppState {
             if !token_is_expired {
                 continue;
             }
-            info!("Removed {} from p2p sessions due to session expiration", user_id);
             // Token is expired
-
             to_be_removed.push(user_id);
         }
 
         for user_id in to_be_removed {
             info!("{} removing", user_id);
             let session_manager = self.remove_from_p2p(&user_id).await.expect("Could not remove from p2p");
-            info!("{} removing2", user_id);
+            info!("Removed {} from p2p sessions due to session expiration", user_id);
         
             let session_manager = session_manager.lock().await;
             info!("{} notifzing offline", user_id);

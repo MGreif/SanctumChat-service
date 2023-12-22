@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{http::{Request, StatusCode}, middleware::Next, response::Response, extract::State, body::Body};
 
-use crate::{utils::jwt::token_into_typed, config::AppState, helper::errors::HTTPResponse};
+use crate::{config::AppState, helper::{errors::HTTPResponse, jwt::token_into_typed}};
 
 pub async fn token_mw(State(app_state): State<Arc<AppState>>, mut request: Request<Body>, next: Next) -> Result<Response, HTTPResponse<()>> {
     let headers = request.headers();

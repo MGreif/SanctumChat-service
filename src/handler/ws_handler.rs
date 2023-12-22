@@ -1,13 +1,13 @@
-use std::{sync::Arc, time::SystemTime};
+use std::sync::Arc;
 
 use axum::{
     extract::{ws::{WebSocketUpgrade, WebSocket, Message}, State, Query}, response::Response,
 };
 use futures::{sink::SinkExt, stream::StreamExt, lock::Mutex};
-use serde_json::{from_str, to_string, json};
+use serde_json::{from_str, to_string};
 use tracing::info;
 use uuid::Uuid;
-use crate::{config::AppState, utils::jwt::{validate_user_token, token_into_typed}, handler::socket_handler::ws_receive_handler::{ws_receive_handler}};
+use crate::{config::AppState, handler::socket_handler::ws_receive_handler::ws_receive_handler, helper::jwt::{token_into_typed, validate_user_token}};
 use super::socket_handler::ws_handle_direct::SocketMessageDirect;
 
 
@@ -185,6 +185,7 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
     // name, and sends them to all broadcast subscribers.
 
     let app_state_clone = app_state.clone();
+    let app_state_clone2 = app_state.clone();
 
     let token = token.clone();
     let mut receive_task = tokio::spawn(async move {
@@ -203,11 +204,17 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
     tokio::select! {
         _ = (&mut receive_task) => {
             sender_receive_task.abort();
-           // app_state_clone2.remove_user_from_p2p(token2.sub.clone()).await
+            match app_state_clone2.remove_from_p2p(&token2.sub).await {
+                Ok(_) => {},
+                Err(err) => info!("Error ocurred removing user from p2p: {}; Maybe the user session expired", err)
+            };
         },
         _ = (&mut sender_receive_task) => {
             receive_task.abort();
-           // app_state_clone2.remove_user_from_p2p(token2.sub.clone()).await
+            match app_state_clone2.remove_from_p2p(&token2.sub).await {
+                Ok(_) => {},
+                Err(err) => info!("Error ocurred removing user from p2p: {}; Maybe the user session expired", err)
+            };
         },
     };
 }

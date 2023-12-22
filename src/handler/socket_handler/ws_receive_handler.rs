@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::{config::AppState, utils::jwt::Token, handler::ws_handler::SocketMessage};
+use crate::{config::AppState, handler::ws_handler::SocketMessage, helper::jwt::Token};
 
 
 #[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]

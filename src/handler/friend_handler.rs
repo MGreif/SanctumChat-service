@@ -4,8 +4,9 @@ use axum::extract::Path;
 use axum::http::StatusCode;
 use diesel::sql_types::{Bool, Text, Uuid, Nullable};
 
+use crate::helper::jwt::Token;
 use crate::models::{UserDTO, FriendRequest};
-use crate::{config::AppState, utils::jwt::Token};
+use crate::{config::AppState};
 use diesel::prelude::*;
 use serde_json::json;
 use crate::handler::ws_handler::{SocketMessage, SocketMessageFriendRequest};

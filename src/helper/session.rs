@@ -1,8 +1,9 @@
 use std::sync::Arc;
-use futures::lock::Mutex;
 use tracing::info;
-use crate::{models::UserDTO, handler::ws_handler::{SocketMessage, SocketMessageStatusChange, EEvent}, config::AppState, utils::jwt::Token};
+use crate::{models::UserDTO, handler::ws_handler::{SocketMessage, SocketMessageStatusChange, EEvent}, config::AppState};
 use tokio::sync::broadcast;
+
+use super::jwt::Token;
 
 #[derive(Debug, Clone)]
 pub struct SessionManager {

@@ -3,7 +3,7 @@ use std::{sync::Arc, time::SystemTime};
 use async_trait::async_trait;
 use uuid::Uuid;
 use diesel::prelude::*;
-use crate::{config::AppState, utils::jwt::Token, models, schema::messages, handler::ws_handler::SocketMessage};
+use crate::{config::AppState, models, schema::messages, handler::ws_handler::SocketMessage, helper::jwt::Token};
 
 use super::ws_receive_handler::{Receivable, SocketMessageError};
 

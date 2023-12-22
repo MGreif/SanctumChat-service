@@ -1,6 +1,6 @@
 use core::time;
 use std::sync::Arc;
-use axum::{middleware, http::{Method, StatusCode, Error}, ServiceExt, error_handling::HandleErrorLayer, response::IntoResponse, BoxError};
+use axum::{middleware, http::{Method, StatusCode}, response::IntoResponse, BoxError};
 use config::{EnvConfig, AppState};
 use diesel::r2d2::{ConnectionManager, Pool};
 use helper::errors::HTTPResponse;
@@ -21,7 +21,6 @@ mod validation;
 use handler::{user_handler, message_handler, friend_handler};
 
 mod middlewares;
-mod utils;
 mod helper;
 
 fn get_connection_pool(env_config: EnvConfig) -> Pool<ConnectionManager<PgConnection>> {
@@ -64,7 +63,7 @@ async fn main() {
         .route("/friend-requests/:uuid", patch(friend_handler::patch_friend_request))
         .route("/token", post( user_handler::token))
         .route("/users", get(user_handler::get_users))
-        .route_layer(middleware::from_fn_with_state(app_state.clone(), middlewares::auth::authBearer))
+        .route_layer(middleware::from_fn_with_state(app_state.clone(), middlewares::auth::bearer_token_validation))
         .route("/logout", post(user_handler::logout))
         .route_layer(middleware::from_fn_with_state(app_state.clone(), middlewares::token::token_mw))
         .route("/users", post(user_handler::create_user))

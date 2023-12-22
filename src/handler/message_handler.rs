@@ -5,10 +5,10 @@ use axum::extract::Query;
 use axum::http::StatusCode;
 use axum::{response::IntoResponse, extract::State};
 use crate::helper::errors::HTTPResponse;
+use crate::helper::jwt::Token;
 use crate::schema::messages::{*};
-use crate::utils::jwt::Token;
 use crate::{config::AppState, models::Message};
-use crate::{schema::messages::dsl::*};
+use crate::schema::messages::dsl::*;
 use diesel::{prelude::*, BoolExpressionMethods};
 
 #[derive(serde::Deserialize, Debug, Clone)]

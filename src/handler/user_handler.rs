@@ -1,16 +1,13 @@
 use std::sync::Arc;
 use axum::{extract::{Json, Query, State}, response::IntoResponse, http::{HeaderMap, header::{SET_COOKIE, self}, StatusCode}, Extension};
-use futures::lock::Mutex;
 use tracing::info;
-use crate::{schema::users::dsl::*, utils::jwt::Token, helper::session::SessionManager};
+use crate::{schema::users::dsl::*, helper::{session::SessionManager, jwt::{Token, encrypt_user_token, hash_string, token_into_typed}, keys::{generate_rsa_key_pair, validate_public_key}}};
 use serde_json::json;
-use crate::{config::AppState, models::{UserDTO, self}, schema::{self, users::{self, all_columns}}, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR, utils::jwt::{hash_string, token_into_typed}};
+use crate::{config::AppState, models::{UserDTO, self}, schema::{self, users::{self, all_columns}}, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR};
 use diesel::prelude::*;
 use diesel::sql_types::Text;
 use crate::helper::errors::HTTPResponse;
 use crate::helper::sql::Count;
-use crate::utils::jwt::encrypt_user_token;
-use openssl::rsa::Rsa;
 use base64;
 use base64::Engine;
 
@@ -79,10 +76,28 @@ pub async fn create_user<'a>(State(state): State<Arc<AppState>>, Json(body): Jso
 
     let mut private_key: Option<Vec<u8>> = None;
     let mut pub_key: Vec<u8> =  body.public_key.as_bytes().to_vec();
+
+    if body.generate_key == false && !body.public_key.is_empty() {
+        match validate_public_key(body.public_key) {
+            Err(_) => return (headers, HTTPResponse::<Vec<u8>> {
+                data: None,
+                message: Some(String::from("Could not validate public key. Ensure that its using .PEM PKCS#8 format")),
+                status: StatusCode::BAD_REQUEST
+            }),
+            Ok(_) => {}
+        }
+    }
+
     if body.generate_key == true {
-        let rsa_key = Rsa::generate(2048).unwrap();
-        let rsa_private_key = rsa_key.private_key_to_pem().unwrap();
-        let rsa_public_key = rsa_key.public_key_to_pem().unwrap();
+        let (rsa_private_key, rsa_public_key) = match generate_rsa_key_pair() {
+            Ok(res) => res,
+            Err(err) => return (headers, HTTPResponse::<Vec<u8>> {
+                data: None,
+                message: Some(err),
+                status: StatusCode::INTERNAL_SERVER_ERROR
+            })
+        };
+
         private_key = Some(rsa_private_key);
         let output = base64::engine::general_purpose::STANDARD.encode(rsa_public_key.as_slice());
         pub_key = output.as_bytes().to_vec();
