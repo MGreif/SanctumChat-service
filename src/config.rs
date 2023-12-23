@@ -102,17 +102,18 @@ impl AppState {
 #[derive(Debug, serde::Serialize, Clone)]
 pub struct EnvConfig {
     pub DATABASE_URL: String,
-    pub HASHING_KEY: String
+    pub HASHING_KEY: String,
+    pub APP_VERSION: String
 }
 
 
 impl EnvConfig {
     pub fn new() -> EnvConfig {
         dotenv().ok();
-        
         EnvConfig {
             DATABASE_URL: env::var("DATABASE_URL").expect("missing env DATABASE_URL"),
-            HASHING_KEY: env::var("HASHING_KEY").expect("missing env HASHING_KEY")
+            HASHING_KEY: env::var("HASHING_KEY").expect("missing env HASHING_KEY"),
+            APP_VERSION: option_env!("CARGO_PKG_VERSION").unwrap().to_string()
         }
     }
 }
