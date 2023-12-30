@@ -103,7 +103,8 @@ impl AppState {
 pub struct EnvConfig {
     pub DATABASE_URL: String,
     pub HASHING_KEY: String,
-    pub APP_VERSION: String
+    pub APP_VERSION: String,
+    pub BASE_PATH: String
 }
 
 
@@ -113,6 +114,7 @@ impl EnvConfig {
         EnvConfig {
             DATABASE_URL: env::var("DATABASE_URL").expect("missing env DATABASE_URL"),
             HASHING_KEY: env::var("HASHING_KEY").expect("missing env HASHING_KEY"),
+            BASE_PATH: env::var("BASE_PATH").unwrap_or_else(|_|String::from("/")),
             APP_VERSION: option_env!("CARGO_PKG_VERSION").unwrap().to_string()
         }
     }

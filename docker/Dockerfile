@@ -1,8 +1,8 @@
 FROM rust:slim-bullseye as build
 
-RUN USER=root cargo new --bin rust-websocket-server
+RUN USER=root cargo new --bin anonchat-backend
 
-WORKDIR /rust-websocket-server
+WORKDIR /anonchat-backend
 
 # Copy our manifests
 COPY ./Cargo.lock ./Cargo.lock
@@ -16,7 +16,7 @@ RUN cargo build --release
 COPY ./src ./src
 
 # Build for release.
-RUN rm ./target/release/deps/rust_websocket_server*
+RUN rm ./target/release/deps/anonchat-backend*
 RUN cargo build --release
 
 
@@ -28,6 +28,6 @@ RUN useradd -u 8877 appuser
 
 USER appuser
 
-COPY --from=build --chown=appuser:appuser /rust-websocket-server/target/release/rust-websocket-server /usr/src/rust-websocket-server
+COPY --from=build --chown=appuser:appuser /anonchat-backend/target/release/anonchat-backend /usr/src/anonchat-backend
 
-CMD ["/usr/src/rust-websocket-server"]
+CMD ["/usr/src/anonchat-backend"]

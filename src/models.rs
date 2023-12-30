@@ -1,9 +1,9 @@
 use std::time::SystemTime;
 
-use diesel::{Queryable, backend::Backend, deserialize::FromSql, pg::Pg, associations::{Identifiable, Associations}, alias, QueryableByName};
+use diesel::{alias, QueryableByName};
 use uuid::Uuid;
 
-use crate::schema::{friends, self};
+use crate::schema;
 
 alias!(schema::users as users_alias: UserAliasDTO);
 

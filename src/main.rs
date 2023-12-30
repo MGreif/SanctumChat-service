@@ -55,7 +55,7 @@ async fn main() {
         }
     });
 
-    let app = Router::new()
+    let main = Router::new()
         .route("/messages", get(message_handler::get_messages))
         .route("/friends/active", get(friend_handler::get_active_friends))
         .route("/friends", get(friend_handler::get_friends))
@@ -74,6 +74,8 @@ async fn main() {
         .layer(cors)
         .with_state(app_state)
         .with_state(config.clone());
+
+    let app = Router::new().nest("/api", main);
     
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();

@@ -20,10 +20,6 @@ pub async fn ws_handler<'a>(ws: WebSocketUpgrade, State(app_state): State<Arc<Ap
     ws.on_upgrade(|socket| handle_socket(socket, app_state, query))
 }
 
-
-
-
-
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub struct SocketMessageNotification {
     pub message: String,

@@ -42,6 +42,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "anonchat-backend"
+version = "0.2.2"
+dependencies = [
+ "async-trait",
+ "axum 0.7.2",
+ "axum-util",
+ "base64 0.21.5",
+ "cookie",
+ "diesel",
+ "dotenv",
+ "futures",
+ "hex",
+ "hmac",
+ "jwt",
+ "openssl",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "syn 2.0.39",
+ "tokio",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "anyhow"
 version = "1.0.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1494,36 +1524,6 @@ dependencies = [
  "spin 0.9.8",
  "untrusted 0.9.0",
  "windows-sys",
-]
-
-[[package]]
-name = "rust-websocket-server"
-version = "0.2.1"
-dependencies = [
- "async-trait",
- "axum 0.7.2",
- "axum-util",
- "base64 0.21.5",
- "cookie",
- "diesel",
- "dotenv",
- "futures",
- "hex",
- "hmac",
- "jwt",
- "openssl",
- "proc-macro2",
- "quote",
- "regex",
- "serde",
- "serde_json",
- "sha2",
- "syn 2.0.39",
- "tokio",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]
