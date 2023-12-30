@@ -16,7 +16,7 @@ RUN cargo build --release
 COPY ./src ./src
 
 # Build for release.
-RUN rm ./target/release/deps/anonchat-backend*
+RUN rm ./target/release/deps/anonchat_backend*
 RUN cargo build --release
 
 
