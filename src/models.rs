@@ -12,8 +12,6 @@ alias!(schema::users as users_alias: UserAliasDTO);
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct UserDTO {
     pub username: String,
-    pub name: String,
-    pub age: i32,
     pub password: String,
     pub public_key: Vec<u8>
 }

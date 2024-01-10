@@ -44,9 +44,6 @@ diesel::table! {
     users (username) {
         #[max_length = 30]
         username -> Varchar,
-        #[max_length = 50]
-        name -> Varchar,
-        age -> Int4,
         #[max_length = 64]
         password -> Varchar,
         public_key -> Bytea,

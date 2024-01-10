@@ -26,8 +26,6 @@ pub struct FriendRequestGETResponseDTO {
     pub id: uuid::Uuid,
     #[diesel(sql_type = Text)]
     pub sender_id: String,
-    #[diesel(sql_type = Nullable<Text>)]
-    pub sender_name: Option<String>,
     #[diesel(sql_type = Text)]
     pub recipient: String,
     #[diesel(sql_type = Nullable<Bool>)]
@@ -35,7 +33,7 @@ pub struct FriendRequestGETResponseDTO {
 }
 pub async fn get_friend_requests(State(app_state): State<Arc<AppState>>, token: Extension<Token>) -> impl IntoResponse {
     let mut pool = app_state.db_pool.get().expect("[get_friend_requests] Could not get connection pool");
-    let query = diesel::sql_query("SELECT r.id as id, u.username as sender_id, u.name as sender_name, r.recipient as recipient, r.accepted as accepted FROM friend_requests as r INNER JOIN users as u ON u.username = r.sender WHERE r.recipient = $1 AND r.accepted IS NULL").bind::<diesel::sql_types::Text, _>(token.sub.clone());
+    let query = diesel::sql_query("SELECT r.id as id, u.username as sender_id, r.recipient as recipient, r.accepted as accepted FROM friend_requests as r INNER JOIN users as u ON u.username = r.sender WHERE r.recipient = $1 AND r.accepted IS NULL").bind::<diesel::sql_types::Text, _>(token.sub.clone());
     let friend_requests_results = query.load(&mut pool).expect("Could not get friend_requests");
     let friend_requests_results: Vec<FriendRequestGETResponseDTO> = friend_requests_results;
     return axum::Json(json!(friend_requests_results))
