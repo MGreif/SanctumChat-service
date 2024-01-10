@@ -2,6 +2,9 @@ use std::time::SystemTime;
 
 use diesel::{alias, QueryableByName};
 use uuid::Uuid;
+use base64;
+use base64::Engine;
+
 
 use crate::schema;
 
@@ -14,6 +17,25 @@ pub struct UserDTO {
     pub username: String,
     pub password: String,
     pub public_key: Vec<u8>
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct UserDTOSanitized {
+    pub username: String,
+    pub public_key: String
+}
+
+impl UserDTO {
+    pub fn sanitize_and_serialize(&self) -> Result<UserDTOSanitized,String> {
+        let public_key_utf8 = match std::str::from_utf8(&self.public_key) {
+            Ok(res) => res.to_string(),
+            Err(_) => return Err(String::from("Failed transforming Vec u8 into utf8 string")) 
+        };
+        return Ok(UserDTOSanitized {
+            username: self.username.clone(),
+            public_key: public_key_utf8
+        })
+    } 
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize, diesel::Queryable, diesel::Selectable, diesel::Insertable, Clone)]

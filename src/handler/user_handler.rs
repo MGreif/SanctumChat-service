@@ -24,6 +24,8 @@ pub struct GetUserQueryDTO {
     pub name: Option<String>
 }
 
+
+
 pub async fn get_users<'a>(State(state): State<Arc<AppState>>, Query(query_params): Query<GetUserQueryDTO>) -> String {
 
     let mut db_conn = state.db_pool.get().expect("could not get database pool");

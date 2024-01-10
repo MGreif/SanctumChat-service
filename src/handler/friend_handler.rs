@@ -5,8 +5,8 @@ use axum::http::StatusCode;
 use diesel::sql_types::{Bool, Text, Uuid, Nullable};
 
 use crate::helper::jwt::Token;
-use crate::models::{UserDTO, FriendRequest};
-use crate::{config::AppState};
+use crate::models::{FriendRequest, UserDTOSanitized};
+use crate::config::AppState;
 use diesel::prelude::*;
 use serde_json::json;
 use crate::handler::ws_handler::{SocketMessage, SocketMessageFriendRequest};
@@ -155,7 +155,7 @@ pub async fn patch_friend_request(State(app_state): State<Arc<AppState>>, token:
 pub async fn get_friends(State(app_state): State<Arc<AppState>>, token: Extension<Token>) -> impl IntoResponse {
     let mut pool = app_state.db_pool.get().expect("[get_friends] Could not get connection pool");
     let result = get_friends_for_user_from_db(& mut pool, &token.sub).await;
-    return HTTPResponse::<Vec<UserDTO>> {
+    return HTTPResponse::<Vec<UserDTOSanitized>> {
         status: StatusCode::OK,
         data: Some(result),
         message: None
