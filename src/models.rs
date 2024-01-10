@@ -13,6 +13,7 @@ alias!(schema::users as users_alias: UserAliasDTO);
 pub struct UserDTO {
     pub username: String,
     pub password: String,
+    pub password_salt: String,
     pub public_key: Vec<u8>
 }
 

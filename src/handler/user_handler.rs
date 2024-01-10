@@ -1,10 +1,10 @@
 use std::sync::Arc;
 use axum::{extract::{Json, Query, State}, response::IntoResponse, http::{HeaderMap, header::{SET_COOKIE, self}, StatusCode}, Extension};
 use tracing::info;
-use crate::{schema::users::dsl::*, helper::{session::SessionManager, jwt::{Token, encrypt_user_token, hash_string, token_into_typed}, keys::{generate_rsa_key_pair, validate_public_key}}};
+use crate::{schema::users::dsl::*, helper::{session::SessionManager, jwt::{Token, encrypt_user_token, hash_string, token_into_typed}, keys::{generate_rsa_key_pair, validate_public_key}, hashing::{hash_password_argon2, verify_password_argon2}}};
 use serde_json::json;
 use crate::{config::AppState, models::{UserDTO, self}, schema::{self, users::{self, all_columns}}, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR};
-use diesel::prelude::*;
+use diesel::{prelude::*, expression::is_aggregate::No};
 use diesel::sql_types::Text;
 use crate::helper::errors::HTTPResponse;
 use crate::helper::sql::Count;
@@ -95,6 +95,7 @@ pub async fn create_user<'a>(State(state): State<Arc<AppState>>, Json(body): Jso
     let mut new_user = models::UserDTO {
         username: body.username,
         password: body.password,
+        password_salt: String::from(""),
         public_key: pub_key
     };
 
@@ -113,9 +114,18 @@ pub async fn create_user<'a>(State(state): State<Arc<AppState>>, Json(body): Jso
                 })
         }
 
-
-    let encrypted_password = hash_string(&new_user.password, state.config.env.HASHING_KEY.clone().as_bytes());
-    new_user.password = encrypted_password;
+    let pw = &new_user.password.clone();
+    let encrypted_password_hash = match hash_password_argon2(&pw) {
+        Ok(hash) => hash,
+        Err(err) => return     (headers, HTTPResponse::<Vec<u8>> {
+            message: Some(err),
+            data: None,
+            status: StatusCode::INTERNAL_SERVER_ERROR
+        })
+    };
+    
+    new_user.password = encrypted_password_hash.to_string();
+    new_user.password_salt = encrypted_password_hash.salt.expect("Could not extract salt from hashed password").to_string();
     info!("{:?}", new_user);
 
 
@@ -183,16 +193,22 @@ pub async fn login<'a>(State(state): State<Arc<AppState>>, Json(body): Json<Logi
 
     let mut pool = state.db_pool.get().expect("Could not establish pool connection");
     let user_result: Result<(String, String, Vec<u8> ), _> = users
-        .select(users::all_columns)
-        .filter(username
-            .eq(&username_id)
-            .and(password.eq(hash_string(&pw, state.config.env.HASHING_KEY.clone().as_bytes()))))
-        .first::<(String, String, Vec<u8> )>(&mut pool);
+        .select((users::username, users::password, users::public_key))
+        .filter(username.eq(&username_id)).first::<(String, String, Vec<u8> )>(&mut pool);
 
     let user = match user_result {
         Err(_) => return (headers, axum::Json(json!({"message": "login failed, wrong username or password"}))),
-        Ok(result_id) => UserDTO { username: result_id.0, password: result_id.1, public_key: result_id.2 }
+        Ok(result_id) => UserDTO { username: result_id.0, password: result_id.1, password_salt: String::from(""), public_key: result_id.2 }
     };
+
+    let passwords_match = match verify_password_argon2(pw, &user.password) {
+        Ok(result) => result,
+        Err(_) => return (headers, axum::Json(json!({"message": "Failed verifying passwords"}))),
+    };
+
+    if !passwords_match {
+        return (headers, axum::Json(json!({"message": "login failed, wrong username or password"})))
+    }
 
     let session_token = encrypt_user_token(user.clone(), state.config.env.HASHING_KEY.as_bytes());
     let token = token_into_typed(&session_token, state.config.env.HASHING_KEY.as_bytes()).expect("Could not parse token");
