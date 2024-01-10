@@ -1,8 +1,8 @@
 FROM rust:slim-bullseye as build
 
-RUN USER=root cargo new --bin anonchat-backend
+RUN USER=root cargo new --bin sanctumchat-service
 
-WORKDIR /anonchat-backend
+WORKDIR /sanctumchat-service
 
 # Copy our manifests
 COPY ./Cargo.lock ./Cargo.lock
@@ -16,7 +16,7 @@ RUN cargo build --release
 COPY ./src ./src
 
 # Build for release.
-RUN rm ./target/release/deps/anonchat_backend*
+RUN rm ./target/release/deps/sanctumchat_service*
 RUN cargo build --release
 
 
@@ -28,6 +28,6 @@ RUN useradd -u 8877 appuser
 
 USER appuser
 
-COPY --from=build --chown=appuser:appuser /anonchat-backend/target/release/anonchat-backend /usr/src/anonchat-backend
+COPY --from=build --chown=appuser:appuser /sanctumchat-service/target/release/sanctumchat-service /usr/src/sanctumchat-service
 
-CMD ["/usr/src/anonchat-backend"]
+CMD ["/usr/src/sanctumchat-service"]

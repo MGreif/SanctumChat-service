@@ -1,12 +1,12 @@
 [package]
-name = "anonchat-backend"
+name = "sanctumchat-service"
 version = "0.2.3"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [[bin]]
-name = "anonchat-backend"
+name = "sanctumchat-service"
 path = "src/main.rs"
 
 [dependencies]

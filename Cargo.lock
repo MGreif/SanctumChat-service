@@ -42,7 +42,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "anonchat-backend"
+name = "sanctumchat-service"
 version = "0.2.3"
 dependencies = [
  "async-trait",

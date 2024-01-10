@@ -18,7 +18,6 @@ DOCKER_HUB_USERNAME=mgreif
 IMAGE_NAME=$DOCKER_HUB_USERNAME/$PACKAGE_NAME:$VERSION
 
 
-
 echo "---META---"
 echo "+ Version     : $VERSION"
 echo "+ Package Name: $PACKAGE_NAME"
