@@ -3,8 +3,6 @@ use std::time::SystemTime;
 use diesel::{alias, QueryableByName};
 use uuid::Uuid;
 use base64;
-use base64::Engine;
-
 
 use crate::schema;
 

@@ -15,3 +15,13 @@ impl<T: Serialize> IntoResponse for HTTPResponse<T> {
         (self.status, body).into_response()
     }
 }
+
+impl<G: Serialize> HTTPResponse<G> {
+    pub fn new_internal_error(message: String) -> HTTPResponse<G> {
+        return Self {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            data: None,
+            message: Some(message)
+        }
+    }
+}

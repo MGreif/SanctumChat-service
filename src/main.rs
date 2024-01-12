@@ -19,9 +19,10 @@ mod config;
 mod handler;
 mod validation;
 use handler::{user_handler, message_handler, friend_handler, version_handler};
-
+mod repositories;
 mod middlewares;
 mod helper;
+mod domain;
 
 fn get_connection_pool(env_config: EnvConfig) -> Pool<ConnectionManager<PgConnection>> {
     let manager = ConnectionManager::<PgConnection>::new(env_config.DATABASE_URL);
@@ -62,7 +63,6 @@ async fn main() {
         .route("/friend-requests", get(friend_handler::get_friend_requests).post(friend_handler::create_friend_request))
         .route("/friend-requests/:uuid", patch(friend_handler::patch_friend_request))
         .route("/token", post( user_handler::token))
-        .route("/users", get(user_handler::get_users))
         .route_layer(middleware::from_fn_with_state(app_state.clone(), middlewares::auth::bearer_token_validation))
         .route("/logout", post(user_handler::logout))
         .route_layer(middleware::from_fn_with_state(app_state.clone(), middlewares::token::token_mw))
