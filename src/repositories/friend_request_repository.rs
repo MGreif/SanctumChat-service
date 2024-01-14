@@ -89,5 +89,6 @@ impl FriendRequestRepositoryInterface for FriendRequestRepository {
 
         return Ok(());
     }
+    
 
 }

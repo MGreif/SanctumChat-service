@@ -19,6 +19,7 @@ mod middlewares;
 mod helper;
 mod domain;
 mod router;
+mod models_test;
 use router::get_main_router;
 
 fn get_connection_pool(env_config: EnvConfig) -> Pool<ConnectionManager<PgConnection>> {

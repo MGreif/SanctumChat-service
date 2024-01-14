@@ -67,4 +67,6 @@ impl<I: FriendRequestRepositoryInterface> FriendRequestDomain<I> {
             Err(err) => Err(HTTPResponse::new_internal_error(err)) 
         }
     }
+
+    
 }

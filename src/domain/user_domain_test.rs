@@ -32,7 +32,7 @@ impl UserRepositoryInterface for UserRepositoryMock {
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::{domain::{test_user_domain::UserRepositoryMock, user_domain::UserDomain}, models::UserDTO, helper::jwt::{hash_string, create_user_token}};
+    use crate::{domain::{user_domain_test::UserRepositoryMock, user_domain::UserDomain}, models::UserDTO, helper::jwt::{hash_string, create_user_token}};
 
     #[test]
     fn test_user_creation() {

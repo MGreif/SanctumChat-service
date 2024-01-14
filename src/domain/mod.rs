@@ -1,3 +1,4 @@
 pub mod user_domain;
-pub mod test_user_domain;
+pub mod user_domain_test;
 pub mod friend_request_domain;
+pub mod friend_domain;

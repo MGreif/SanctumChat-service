@@ -2,8 +2,6 @@ use std::time::SystemTime;
 
 use diesel::{alias, QueryableByName};
 use uuid::Uuid;
-use base64;
-
 use crate::schema;
 
 alias!(schema::users as users_alias: UserAliasDTO);
@@ -17,7 +15,7 @@ pub struct UserDTO {
     pub public_key: Vec<u8>
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, PartialEq)]
 pub struct UserDTOSanitized {
     pub username: String,
     pub public_key: String
@@ -35,6 +33,7 @@ impl UserDTO {
         })
     } 
 }
+
 
 #[derive(Debug, serde::Deserialize, serde::Serialize, diesel::Queryable, diesel::Selectable, diesel::Insertable, Clone)]
 #[diesel(table_name = crate::schema::messages)]

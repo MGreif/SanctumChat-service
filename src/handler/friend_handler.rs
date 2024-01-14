@@ -3,16 +3,16 @@ use axum::{Extension, extract::State, Json, response::IntoResponse};
 use axum::extract::Path;
 use axum::http::StatusCode;
 use diesel::sql_types::{Bool, Text, Uuid, Nullable};
-
+use crate::domain::friend_domain::FriendDomain;
 use crate::domain::friend_request_domain::FriendRequestDomain;
 use crate::helper::jwt::Token;
 use crate::models::{FriendRequest, UserDTOSanitized};
 use crate::config::AppState;
+use crate::repositories::friend_repository::FriendRepository;
 use crate::repositories::friend_request_repository::FriendRequestRepository;
 use diesel::prelude::*;
 use crate::handler::ws_handler::{SocketMessage, SocketMessageFriendRequest};
 use crate::helper::errors::HTTPResponse;
-use crate::helper::sql::get_friends_for_user_from_db;
 use crate::validation::string_validate::UuidValidator;
 
 #[derive(serde::Deserialize, Debug, serde::Serialize)]
@@ -113,13 +113,18 @@ pub async fn patch_friend_request(State(app_state): State<Arc<AppState>>, token:
 }
 
 pub async fn get_friends(State(app_state): State<Arc<AppState>>, token: Extension<Token>) -> impl IntoResponse {
-    let mut pool = app_state.db_pool.get().expect("[get_friends] Could not get connection pool");
-    let result = get_friends_for_user_from_db(& mut pool, &token.sub).await;
+    let friend_repository = FriendRepository { pg_pool: app_state.db_pool.get().expect("Could not get db_pool") };
+    let mut friendDomain = FriendDomain::new(friend_repository);
+    let result = match friendDomain.get_friends(&token.sub) {
+        Ok(res) => res,
+        Err(err) => return err.into_response()
+    };
+
     return HTTPResponse::<Vec<UserDTOSanitized>> {
         status: StatusCode::OK,
         data: Some(result),
         message: None
-    }
+    }.into_response()
 }
 
 pub async fn get_active_friends(State(app_state): State<Arc<AppState>>, token: Extension<Token>) -> impl IntoResponse {

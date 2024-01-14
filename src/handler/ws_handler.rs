@@ -177,9 +177,6 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
         }
     });
 
-    // Spawn a task that takes messages from the websocket, prepends the user
-    // name, and sends them to all broadcast subscribers.
-
     let app_state_clone = app_state.clone();
     let app_state_clone2 = app_state.clone();
 
