@@ -54,14 +54,6 @@ pub async fn create_friend_request(State(app_state): State<Arc<AppState>>, token
 
     let recipient = body.recipient;
 
-    if recipient == token.sub {
-        return HTTPResponse::<FriendRequest> {
-            status: StatusCode::BAD_REQUEST,
-            data: None,
-            message: Some(format!("You cannot send yourself a friend request"))
-        }.into_response()
-    }
-
     let friend_request = match friend_request_domain.create_friend_request(&token.sub, &recipient) {
         Ok(res) => res,
         Err(err) => return err.into_response()
@@ -88,7 +80,8 @@ pub struct FriendRequestPatchDTOBody {
 }
 
 pub async fn patch_friend_request(State(app_state): State<Arc<AppState>>, token: Extension<Token>,Path(uuid): Path<String>, Json(body): Json<FriendRequestPatchDTOBody>) -> impl IntoResponse {
-    let mut pool = app_state.db_pool.get().expect("[patch_friend_requests] Could not get connection pool");
+    let friend_request_repository = FriendRequestRepository { pg_pool: app_state.db_pool.get().expect("Could not get db_pool") };
+    let mut friend_request_domain = FriendRequestDomain::new(friend_request_repository);
 
 
     let validator = UuidValidator::new();
@@ -98,39 +91,25 @@ pub async fn patch_friend_request(State(app_state): State<Arc<AppState>>, token:
             status: StatusCode::BAD_REQUEST,
             data: None,
             message: Some(String::from(err))
-        }
+        }.into_response()
     }
 
     let request_id: uuid::Uuid = match uuid::Uuid::parse_str(&uuid.as_str()) {
-        Err(_) => return HTTPResponse::<FriendRequest> { status: StatusCode::BAD_REQUEST, message: Some(String::from("[patch_friend_requests] Failed validating id")), data: None },
+        Err(_) => return HTTPResponse::<FriendRequest> { status: StatusCode::BAD_REQUEST, message: Some(String::from("[patch_friend_requests] Failed validating id")), data: None }.into_response(),
         Ok(t) => t
     };
 
-    match diesel::sql_query("SELECT COUNT(*) FROM friend_requests where id = $1 AND recipient = $2 AND accepted IS NULL")
-        .bind::<diesel::sql_types::Uuid, _>(request_id)
-        .bind::<diesel::sql_types::Text, _>(token.sub.clone())
-        .load::<crate::helper::sql::Count>(&mut pool)
-        .expect("Could not get count of friend requests").pop().expect("No rows").count {
-        0 =>   return  HTTPResponse::<FriendRequest> {
-            status: StatusCode::BAD_REQUEST,
+    match friend_request_domain.accept_or_deny_friend_request(&request_id, &token.sub, body.accepted) {
+        Ok(_) => HTTPResponse::<FriendRequest> {
+            status: StatusCode::ACCEPTED,
             data: None,
-            message: Some(format!("No Friendrequest available", ))
-        },
-        _ => {}
+            message: Some(String::from("Successfully updated friendrequest"))
+        }.into_response(),
+        Err(err) => err.into_response()
     }
 
 
-    let mut query = diesel::sql_query("UPDATE friend_requests SET ").into_boxed();
-
-    query = query.sql("accepted = $1 ").bind::<Bool, _>(body.accepted);
-
-    let query = query.sql("WHERE id = $2").bind::<Uuid, _>(request_id);
-    let patched = query.execute(&mut pool).expect("[patch_friend_requests] Could not patch friend request");
-    HTTPResponse::<FriendRequest> {
-        status: StatusCode::ACCEPTED,
-        data: None,
-        message: Some(format!("Inserted: {} rows", patched))
-    }
+    
 }
 
 pub async fn get_friends(State(app_state): State<Arc<AppState>>, token: Extension<Token>) -> impl IntoResponse {

@@ -7,7 +7,7 @@ pub trait FriendRequestRepositoryInterface {
     fn get_friend_requests_sent_to_user(&mut self, usern: &String) -> Result<Vec<FriendRequestGETResponseDTO>, String>;
     fn check_if_friend_request_is_present(&mut self, sender: &String, recipient: &String, accepted: Option<bool>) -> Result<bool, String>;
     fn save_friend_request(&mut self, friend_request: FriendRequest) -> Result<(), String>;
-    fn update_friend_request_accepted(&mut self, friend_request_id: &uuid::Uuid, accepted: bool) -> Result<(), String>;
+    fn update_friend_request_accepted(&mut self, friend_request_id: &uuid::Uuid, recipient: &String, accepted: bool) -> Result<(), String>;
 }
 
 pub struct FriendRequestRepository {
@@ -69,12 +69,14 @@ impl FriendRequestRepositoryInterface for FriendRequestRepository {
         return Ok(());
     }
 
-    fn update_friend_request_accepted(&mut self, friend_request_id: &uuid::Uuid, accepted: bool) -> Result<(), String> {
+    fn update_friend_request_accepted(&mut self, friend_request_id: &uuid::Uuid, recipient: &String, accepted: bool) -> Result<(), String> {
         let mut query = diesel::sql_query("UPDATE friend_requests SET ").into_boxed();
 
         query = query.sql("accepted = $1 ").bind::<Bool, _>(accepted);
 
-        let query = query.sql("WHERE id = $2").bind::<diesel::sql_types::Uuid, _>(friend_request_id);
+        let query = query.sql("WHERE id = $2 AND recipient = $3")
+        .bind::<diesel::sql_types::Uuid, _>(friend_request_id)
+        .bind::<diesel::sql_types::Text, _>(recipient);
         let patched = query.execute(&mut self.pg_pool);
         let patched = match patched {
             Err(err) => return Err(format!("Could not patch friend request: {}", err)),
