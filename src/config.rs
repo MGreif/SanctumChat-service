@@ -18,7 +18,12 @@ pub struct AppState {
 impl AppState {
     pub fn new(pool: Pool<ConnectionManager<PgConnection>>, config: ConfigManager) -> Self {
         let (tx, _rx) = broadcast::channel(100);
-         AppState { db_pool: pool, broadcast: tx, config: config, p2p_connections: Mutex::new(HashMap::new()) }
+         AppState {
+            db_pool: pool,
+            broadcast: tx,
+            config: config,
+            p2p_connections: Mutex::new(HashMap::new())
+        }
     }
 
     pub async fn insert_into_p2p(&self, session_manager: SessionManager) {

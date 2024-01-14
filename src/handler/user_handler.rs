@@ -1,10 +1,8 @@
 use std::sync::Arc;
 use axum::{extract::{Json, State}, response::IntoResponse, http::{HeaderMap, header::{SET_COOKIE, self}, StatusCode}, Extension};
 use tracing::info;
-use crate::{schema::users::dsl::*, helper::{session::SessionManager, jwt::{Token, encrypt_user_token, hash_string, token_into_typed}, keys::{generate_rsa_key_pair, validate_public_key}}, repositories::user_repository::UserRepository, domain::user_domain::UserDomain};
-use serde_json::json;
-use crate::{config::AppState, models::{UserDTO, self}, schema::users::{self, all_columns}, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR};
-use diesel::prelude::*;
+use crate::{helper::{session::SessionManager, jwt::{Token, hash_string}, keys::{generate_rsa_key_pair, validate_public_key}}, repositories::user_repository::UserRepository, domain::user_domain::UserDomain, models::UserDTO};
+use crate::{config::AppState, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR};
 use crate::helper::errors::HTTPResponse;
 use base64;
 use base64::Engine;
@@ -23,7 +21,7 @@ pub struct GetUserQueryDTO {
 }
 
 pub async fn create_user<'a>(State(state): State<Arc<AppState>>, Json(body): Json<UserCreateDTO>) -> impl IntoResponse {
-    let user_repository = UserRepository::new(state.db_pool.get().expect("Could not get db_pool"));
+    let user_repository = UserRepository { pg_pool: state.db_pool.get().expect("Could not get db_pool") };
     let mut user_domain = UserDomain::new(user_repository);
 
     let headers = HeaderMap::new();
@@ -80,7 +78,7 @@ pub async fn create_user<'a>(State(state): State<Arc<AppState>>, Json(body): Jso
         pub_key = output.as_bytes().to_vec();
     };
 
-    let new_user = models::UserDTO {
+    let new_user = UserDTO {
         username: body.username,
         password: body.password,
         public_key: pub_key
@@ -126,6 +124,9 @@ pub async fn logout<'a>(State(state): State<Arc<AppState>>, token: Extension<Tok
 
 pub async fn login<'a>(State(state): State<Arc<AppState>>, Json(body): Json<LoginDTO>) -> impl IntoResponse {
     let LoginDTO { password: pw, username: username_id } = body;
+    let user_repository = UserRepository { pg_pool: state.db_pool.get().expect("Could not get db_pool") };
+    let mut user_domain = UserDomain::new(user_repository);
+
     let mut headers = HeaderMap::new();
     headers.insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
 
@@ -133,7 +134,11 @@ pub async fn login<'a>(State(state): State<Arc<AppState>>, Json(body): Json<Logi
     match DEFAULT_INPUT_FIELD_STRING_VALIDATOR.validate(&username_id) {
         Err(err) => {
             info!("{} - Validation error: {}", "name", err);
-            return (headers, axum::Json(json!({"message": err, "field": "username", })))
+            return (headers, HTTPResponse::<()> {
+                data: None,
+                message: Some(String::from("Login failed lol, changeme")),
+                status: StatusCode::UNAUTHORIZED
+            }.into_response())
         },
         Ok(_) => {}
     }
@@ -141,27 +146,24 @@ pub async fn login<'a>(State(state): State<Arc<AppState>>, Json(body): Json<Logi
     match DEFAULT_INPUT_FIELD_STRING_VALIDATOR.validate(&pw) {
         Err(err) => {
             info!("{} - Validation error: {}", "name", err);
-            return (headers, axum::Json(json!({"message": err, "field": "password", })))
+            return (headers, HTTPResponse::<()> {
+                data: None,
+                message: Some(String::from("Login failed lol, changeme")),
+                status: StatusCode::UNAUTHORIZED
+            }.into_response())
         },
         Ok(_) => {}
     }
 
 
-    let mut pool = state.db_pool.get().expect("Could not establish pool connection");
-    let user_result: Result<(String, String, Vec<u8> ), _> = users
-        .select(users::all_columns)
-        .filter(username
-            .eq(&username_id)
-            .and(password.eq(hash_string(&pw, state.config.env.HASHING_KEY.clone().as_bytes()))))
-        .first::<(String, String, Vec<u8> )>(&mut pool);
+    let pw = hash_string(&pw, state.config.env.HASHING_KEY.as_bytes());
+    let token = user_domain.login_user_and_prepare_token(&username_id, &pw, state.config.env.HASHING_KEY.as_bytes());
 
-    let user = match user_result {
-        Err(_) => return (headers, axum::Json(json!({"message": "login failed, wrong username or password"}))),
-        Ok(result_id) => UserDTO { username: result_id.0, password: result_id.1, public_key: result_id.2 }
+    let (user,  token, session_token) = match token {
+        Ok(result) => result,
+        Err(err) => return (headers, err.into_response())
     };
 
-    let session_token = encrypt_user_token(user.clone(), state.config.env.HASHING_KEY.as_bytes());
-    let token = token_into_typed(&session_token, state.config.env.HASHING_KEY.as_bytes()).expect("Could not parse token");
 
     let session_manager = SessionManager::new(user.clone(), token, state.clone());
     session_manager.notify_online().await;
@@ -171,25 +173,36 @@ pub async fn login<'a>(State(state): State<Arc<AppState>>, Json(body): Json<Logi
     headers.insert(SET_COOKIE, format!("session={}; Max-Age=2592000; Path=/; SameSite=None", session_token).parse().unwrap());
 
 
-    (headers, axum::Json(json!({"message": "login successful", "token": session_token})))
+    (headers, HTTPResponse::<String> {
+        data: Some(session_token),
+        message: Some(String::from("Login successful")),
+        status: StatusCode::OK
+    }.into_response())
 }
 
-pub async fn token<'a>(State(app_state): State<Arc<AppState>>, Extension(token): Extension<Token>, headers: HeaderMap) -> (StatusCode, String) {
-    let mut pool = app_state.db_pool.get().expect("Could not get db pool");
-    let user: UserDTO = match users.select(all_columns).filter(username.eq(&token.sub)).first(&mut pool) {
-        Ok(user) => user,
-        Err(_) => return (StatusCode::FORBIDDEN, axum::Json::from(json!({"message": "Could not get user"})).to_string())
+pub async fn token<'a>(State(app_state): State<Arc<AppState>>, Extension(token): Extension<Token>) -> impl IntoResponse {
+    let pool = app_state.db_pool.get().expect("Could not get db pool");
+    let repository = UserRepository { pg_pool: pool };
+    let mut domain = UserDomain::new(repository);
+
+    let result = domain.renew_token(&token.sub, app_state.config.env.HASHING_KEY.as_bytes());
+
+    let (user, token, token_str) = match result {
+        Ok(result) => result,
+        Err(err) => return HTTPResponse::<()> {
+            status: StatusCode::BAD_REQUEST,
+            data: None,
+            message: Some(err)
+        }.into_response()
     };
+
 
     let session_manager = SessionManager::new(user.clone(), token, app_state.clone());
     app_state.insert_into_p2p(session_manager).await;
     
-
-    info!("token 5");
-
-    let token = headers.get("authorization").unwrap().to_owned();
-    let token = token.to_str().unwrap();
-    let token = token.replace("Bearer ", "");
-
-    (StatusCode::OK, axum::Json::from(json!({"token": token})).to_string())
+    HTTPResponse::<String> {
+        data: Some(token_str),
+        message: None,
+        status: StatusCode::OK
+    }.into_response()
 }

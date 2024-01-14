@@ -1,6 +1,14 @@
-use axum::{response::IntoResponse, http::StatusCode};
+use axum::{response::IntoResponse, http::{StatusCode, Response}, body::Body};
 use serde::Serialize;
 use serde_json::json;
+
+
+#[derive(Clone, Serialize)]
+pub struct FieldError {
+    pub field: String,
+    pub message: String
+}
+
 
 #[derive(Clone)]
 pub struct HTTPResponse<G: Serialize> {
@@ -15,6 +23,8 @@ impl<T: Serialize> IntoResponse for HTTPResponse<T> {
         (self.status, body).into_response()
     }
 }
+
+
 
 impl<G: Serialize> HTTPResponse<G> {
     pub fn new_internal_error(message: String) -> HTTPResponse<G> {

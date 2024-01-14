@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::UserDTO;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Token {
     pub sub: String,
     pub public_key: String,
@@ -22,21 +22,29 @@ pub fn get_time_since_epoch() -> Duration {
     since_the_epoch
 }
 
-pub fn encrypt_user_token(user: UserDTO, secret_key: &[u8]) -> String {
+pub fn create_user_token(user: UserDTO, secret_key: &[u8]) -> (Token, String) {
     let key: Hmac<Sha256> = Hmac::new_from_slice(secret_key).unwrap();
     let mut claims: BTreeMap<&str, String> = BTreeMap::new();
     let since_the_epoch = get_time_since_epoch();
     let jwt_valid_for = Duration::new(15*60, 0);
 
     let jwt_expires = since_the_epoch.add(jwt_valid_for);
-    info!("{} -", jwt_expires.clone().as_secs_f32());
 
-    claims.insert("sub", user.username.to_string());
-    claims.insert("exp", jwt_expires.as_secs_f32().to_string());
     let public_key_base64 = String::from_utf8(user.public_key).expect("Could not parse public_key"); // Converting to string
-    claims.insert("public_key", public_key_base64);
+
+    let token = Token {
+        exp: jwt_expires,
+        public_key: public_key_base64,
+        sub: user.username.to_string()
+    };
+    
+
+    claims.insert("sub", token.sub.clone());
+    claims.insert("exp", token.exp.as_secs_f32().to_string().clone());
+    claims.insert("public_key", token.public_key.clone());
+
     let token_str = claims.sign_with_key(&key).unwrap();
-    token_str
+    (token, token_str)
 }
 
 pub fn validate_user_token(token: String, secret_key: &[u8]) -> Result<bool, String> {

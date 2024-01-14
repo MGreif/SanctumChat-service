@@ -1,14 +1,13 @@
 use axum::http::StatusCode;
+use crate::{repositories::user_repository::UserRepositoryInterface, models::UserDTO, helper::{errors::HTTPResponse, jwt::{hash_string, Token, create_user_token, token_into_typed}}};
 
-use crate::{repositories::user_repository::UserRepository, models::UserDTO, helper::{errors::HTTPResponse, jwt::hash_string}};
-
-pub struct UserDomain {
-    user_repository: UserRepository
+pub struct UserDomain<I: UserRepositoryInterface> {
+    user_repository: I
 }
 
-impl UserDomain {
+impl<I: UserRepositoryInterface> UserDomain<I> {
 
-    pub fn new(user_repository: UserRepository) -> Self {
+    pub fn new(user_repository: I) -> Self {
         return UserDomain {
             user_repository
         }
@@ -23,7 +22,7 @@ impl UserDomain {
             Ok(exists) => exists
         };
 
-        if !user_exists {
+        if user_exists {
             return Err(HTTPResponse { message: Some(String::from("User with this username already exists")), status: StatusCode::BAD_REQUEST, data: None })
         }
 
@@ -38,5 +37,35 @@ impl UserDomain {
             Ok(_) => Ok(user),
             Err(err) => Err(HTTPResponse::new_internal_error(err))
         }
+    }
+
+    pub fn login_user_and_prepare_token(&mut self, usern: &String, passw: &String, hashing_key: &[u8]) -> Result<(UserDTO, Token, String), HTTPResponse<Token>> {
+        
+        let user = self.user_repository.get_user_by_username_and_password(usern, passw);
+        let user = match user {
+            Ok(user) => user,
+            Err(_) => return Err(HTTPResponse {
+                status: StatusCode::UNAUTHORIZED,
+                data: None,
+                message: Some(String::from("Username or password wrong"))
+            })
+        };
+
+        
+        let (token, token_str) = create_user_token(user.clone(), hashing_key);
+
+        Ok((user, token, token_str))
+    }
+
+    pub fn renew_token(&mut self, usern: &String, hashing_key: &[u8]) -> Result<(UserDTO, Token, String), String> {
+        let user = self.user_repository.get_user_by_username(usern);
+        let user = match user {
+            Err(err) => return Err(format!("Could not find user {}: {}", usern, err)),
+            Ok(user) => user
+        };
+
+        let (token, token_str) = create_user_token(user.clone(), hashing_key);
+
+        return Ok((user, token, token_str ))
     }
 }
