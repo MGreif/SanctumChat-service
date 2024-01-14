@@ -4,15 +4,15 @@ use axum::extract::Path;
 use axum::http::StatusCode;
 use diesel::sql_types::{Bool, Text, Uuid, Nullable};
 
+use crate::domain::friend_request_domain::FriendRequestDomain;
 use crate::helper::jwt::Token;
 use crate::models::{FriendRequest, UserDTOSanitized};
 use crate::config::AppState;
+use crate::repositories::friend_request_repository::FriendRequestRepository;
 use diesel::prelude::*;
-use serde_json::json;
 use crate::handler::ws_handler::{SocketMessage, SocketMessageFriendRequest};
 use crate::helper::errors::HTTPResponse;
 use crate::helper::sql::get_friends_for_user_from_db;
-use crate::schema::friend_requests::dsl::friend_requests;
 use crate::validation::string_validate::UuidValidator;
 
 #[derive(serde::Deserialize, Debug, serde::Serialize)]
@@ -32,15 +32,26 @@ pub struct FriendRequestGETResponseDTO {
     pub accepted: Option<bool>
 }
 pub async fn get_friend_requests(State(app_state): State<Arc<AppState>>, token: Extension<Token>) -> impl IntoResponse {
-    let mut pool = app_state.db_pool.get().expect("[get_friend_requests] Could not get connection pool");
-    let query = diesel::sql_query("SELECT r.id as id, u.username as sender_id, r.recipient as recipient, r.accepted as accepted FROM friend_requests as r INNER JOIN users as u ON u.username = r.sender WHERE r.recipient = $1 AND r.accepted IS NULL").bind::<diesel::sql_types::Text, _>(token.sub.clone());
-    let friend_requests_results = query.load(&mut pool).expect("Could not get friend_requests");
-    let friend_requests_results: Vec<FriendRequestGETResponseDTO> = friend_requests_results;
-    return axum::Json(json!(friend_requests_results))
+    let friend_request_repository = FriendRequestRepository { pg_pool: app_state.db_pool.get().expect("Could not get db_pool") };
+    let mut friend_request_domain = FriendRequestDomain::new(friend_request_repository);
+
+    let friend_requests_result = match friend_request_domain.get_friend_requests_for_user(&token.sub) {
+        Ok(res) => res,
+        Err(err) => return err.into_response()
+    };
+
+
+    return HTTPResponse::<Vec<FriendRequestGETResponseDTO>> {
+        data: Some(friend_requests_result),
+        message: None,
+        status: StatusCode::OK
+    }.into_response()
 }
 
 pub async fn create_friend_request(State(app_state): State<Arc<AppState>>, token: Extension<Token>, Json(body): Json<FriendRequestPOSTRequestDTO>) -> impl IntoResponse {
-    let mut pool = app_state.db_pool.get().expect("[create_friend_requests] Could not get connection pool");
+    let friend_request_repository = FriendRequestRepository { pg_pool: app_state.db_pool.get().expect("Could not get db_pool") };
+    let mut friend_request_domain = FriendRequestDomain::new(friend_request_repository);
+
     let recipient = body.recipient;
 
     if recipient == token.sub {
@@ -48,57 +59,27 @@ pub async fn create_friend_request(State(app_state): State<Arc<AppState>>, token
             status: StatusCode::BAD_REQUEST,
             data: None,
             message: Some(format!("You cannot send yourself a friend request"))
-        }
+        }.into_response()
     }
 
-    let mut already_present = diesel::sql_query("SELECT COUNT(*) FROM friend_requests WHERE (sender = $1 AND recipient = $2) OR (sender = $2 AND recipient = $1)").bind::<diesel::sql_types::Text, _>(token.sub.clone()).bind::<Text, _>(&recipient).load::<crate::helper::sql::Count>(&mut pool).expect("Could not get friend requests");
-    let already_present = match already_present.pop() {
-        Some(i) => i.count,
-        None => return HTTPResponse::<FriendRequest> {
-            status: StatusCode::BAD_REQUEST,
-            data: None,
-            message: Some(format!("Could not get present friend-requests count"))
-        },
-    };
-
-    match already_present {
-        0 => {},
-        _ => return HTTPResponse::<FriendRequest> {
-            status: StatusCode::BAD_REQUEST,
-            data: None,
-            message: Some(format!("There is still a friend request present (Already created or pending or whatever. TODO: Change later)"))
-        }
-    };
-
-
-    let new_request = FriendRequest {
-        id: uuid::Uuid::new_v4(),
-        accepted: None,
-        recipient: recipient.clone(),
-        sender: token.sub.clone()
-    };
-    let inserted_rows = match diesel::insert_into(friend_requests).values(&new_request).execute(&mut pool) {
-        Ok(t) => t,
-        Err(err) => return HTTPResponse::<FriendRequest> {
-            data: None,
-            status: StatusCode::INTERNAL_SERVER_ERROR,
-            message: Some(format!("Could not insert friend request: {:?}", err))
-        }
+    let friend_request = match friend_request_domain.create_friend_request(&token.sub, &recipient) {
+        Ok(res) => res,
+        Err(err) => return err.into_response()
     };
 
     let receiver_session_manager = app_state.p2p_connections.lock().await;
     let receiver_session_manager = receiver_session_manager.get(&recipient.clone());
     if let Some(sm) = receiver_session_manager {
         let sm = sm.lock().await;
-        let friend_request_message = SocketMessageFriendRequest::new(new_request.id, token.sub.clone());
+        let friend_request_message = SocketMessageFriendRequest::new(friend_request.id, token.sub.clone());
         sm.send_direct_message(SocketMessage::SocketMessageFriendRequest(friend_request_message)).await;
     };
 
     HTTPResponse::<FriendRequest> {
         status: StatusCode::CREATED,
-        data: Some(new_request),
-        message: Some(format!("Inserted: {} rows", inserted_rows))
-    }
+        data: Some(friend_request),
+        message: Some(format!("Successfully created friendrequest"))
+    }.into_response()
 }
 
 #[derive(serde::Deserialize)]
