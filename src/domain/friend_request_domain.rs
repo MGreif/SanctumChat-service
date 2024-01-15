@@ -41,7 +41,7 @@ impl<I: FriendRequestRepositoryInterface> FriendRequestDomain<I> {
         if is_present {
             return Err(HTTPResponse::<()> {
                 data: None,
-                message: Some(format!("You already sent a friend request to {}", sender)),
+                message: Some(format!("You already sent a friend request to {}", recipient)),
                 status: StatusCode::BAD_REQUEST
             })
         };

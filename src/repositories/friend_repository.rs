@@ -1,4 +1,4 @@
-use diesel::{r2d2::{PooledConnection, ConnectionManager}, PgConnection, sql_types::Text, pg::Pg};
+use diesel::{r2d2::{PooledConnection, ConnectionManager}, PgConnection};
 use diesel::prelude::*;
 use diesel::query_dsl::*;
 use crate::models::UserDTOSanitized;

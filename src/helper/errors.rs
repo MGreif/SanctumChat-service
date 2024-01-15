@@ -10,7 +10,7 @@ pub struct FieldError {
 }
 
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct HTTPResponse<G: Serialize> {
     pub message: Option<String>,
     pub status: StatusCode,
