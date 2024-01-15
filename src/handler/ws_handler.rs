@@ -160,12 +160,6 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
     let mess = SocketMessage::SocketMessageOnlineUsers(SocketMessageOnlineUsers::new(online_friends));
     sender.lock().await.send(Message::Text(to_string(&mess).unwrap())).await.expect("Failed sending joining message");
 
-    sender.lock().await.send(Message::Text(format!("You joined the channel"))).await.expect("Failed sending joining message");
-
-    let msg = format!("{} joined.", token.sub);
-
-    let _ = app_state_orig.broadcast.send(msg);
-
     let sender_in_receiver = sender.clone();
 
     let mut sender_receive_task = tokio::spawn(async move {

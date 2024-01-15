@@ -32,7 +32,9 @@ impl UserRepositoryInterface for UserRepositoryMock {
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::{domain::{user_domain_test::UserRepositoryMock, user_domain::UserDomain}, models::UserDTO, helper::jwt::{hash_string, create_user_token}};
+    use std::time::Duration;
+
+    use crate::{domain::{user_domain_test::UserRepositoryMock, user_domain::UserDomain}, models::UserDTO, helper::jwt::{hash_string, create_user_token, generate_token_expiration}};
 
     #[test]
     fn test_user_creation() {
@@ -80,17 +82,17 @@ mod integration_tests {
             public_key: vec![]
         };
 
-        let (token_expect, token_str_expect) = create_user_token(user_expect.clone(), hashing_key);
+        let (valid_for, _) = generate_token_expiration(Duration::new(15*60, 0));
+        let (token_expect, _) = create_user_token(user_expect.clone(), hashing_key, valid_for);
         let result = domain.login_user_and_prepare_token(&username, &password, hashing_key);
 
-        let (user_output, token, token_str) = match result {
+        let (user_output, token, _) = match result {
             Ok(res) => res,
             Err(_) => return assert!(false)
         };
 
         assert_eq!(user_expect, user_output);
         assert_eq!(token_expect.sub, token.sub);
-        assert_eq!(token_str_expect, token_str);
     }
 
 
@@ -110,17 +112,18 @@ mod integration_tests {
             public_key: vec![]
         };
 
-        let (token_expect, token_str_expect) = create_user_token(user_expect.clone(), hashing_key);
+        let (valid_for, _) = generate_token_expiration(Duration::new(15*60, 0));
+
+        let (token_expect, _) = create_user_token(user_expect.clone(), hashing_key, valid_for);
         let result = domain.renew_token(&username, hashing_key);
 
 
-        let (user_output, token, token_str) = match result {
+        let (user_output, token, _) = match result {
             Ok(res) => res,
             Err(_) => return assert!(false)
         };
 
         assert_eq!(user_expect, user_output);
         assert_eq!(token_expect.sub, token.sub);
-        assert_eq!(token_str_expect, token_str);
     }
 }

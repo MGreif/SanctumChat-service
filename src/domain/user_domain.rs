@@ -1,5 +1,7 @@
+use std::time::Duration;
+
 use axum::http::StatusCode;
-use crate::{repositories::user_repository::UserRepositoryInterface, models::UserDTO, helper::{errors::HTTPResponse, jwt::{hash_string, Token, create_user_token, token_into_typed}}};
+use crate::{repositories::user_repository::UserRepositoryInterface, models::UserDTO, helper::{errors::HTTPResponse, jwt::{hash_string, Token, create_user_token, token_into_typed, generate_token_expiration}}};
 
 pub struct UserDomain<I: UserRepositoryInterface> {
     user_repository: I
@@ -51,8 +53,9 @@ impl<I: UserRepositoryInterface> UserDomain<I> {
             })
         };
 
+        let (valid_for, _) = generate_token_expiration(Duration::new(1*60, 0));
         
-        let (token, token_str) = create_user_token(user.clone(), hashing_key);
+        let (token, token_str) = create_user_token(user.clone(), hashing_key, valid_for);
 
         Ok((user, token, token_str))
     }
@@ -64,7 +67,9 @@ impl<I: UserRepositoryInterface> UserDomain<I> {
             Ok(user) => user
         };
 
-        let (token, token_str) = create_user_token(user.clone(), hashing_key);
+        let (valid_for, _) = generate_token_expiration(Duration::new(1*60, 0));
+
+        let (token, token_str) = create_user_token(user.clone(), hashing_key, valid_for);
 
         return Ok((user, token, token_str ))
     }

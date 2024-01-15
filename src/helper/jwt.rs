@@ -22,28 +22,35 @@ pub fn get_time_since_epoch() -> Duration {
     since_the_epoch
 }
 
-pub fn create_user_token(user: UserDTO, secret_key: &[u8]) -> (Token, String) {
+pub fn generate_token_expiration(token_duration: Duration) -> (Duration, String) {
+    let since_the_epoch = get_time_since_epoch();
+
+    let jwt_expires = since_the_epoch.add(token_duration);
+    
+    (jwt_expires, jwt_expires.as_secs_f32().to_string())
+}
+
+pub fn create_user_token(user: UserDTO, secret_key: &[u8], expires: Duration) -> (Token, String) {
     let key: Hmac<Sha256> = Hmac::new_from_slice(secret_key).unwrap();
     let mut claims: BTreeMap<&str, String> = BTreeMap::new();
-    let since_the_epoch = get_time_since_epoch();
-    let jwt_valid_for = Duration::new(15*60, 0);
 
-    let jwt_expires = since_the_epoch.add(jwt_valid_for);
 
     let public_key_base64 = String::from_utf8(user.public_key).expect("Could not parse public_key"); // Converting to string
 
     let token = Token {
-        exp: jwt_expires,
+        exp: expires,
         public_key: public_key_base64,
         sub: user.username.to_string()
     };
     
-
+    println!("{:?}", token.clone());
+    println!("{:?}", token.clone());
     claims.insert("sub", token.sub.clone());
-    claims.insert("exp", token.exp.as_secs_f32().to_string().clone());
+    claims.insert("exp", token.exp.as_nanos().to_string().clone());
     claims.insert("public_key", token.public_key.clone());
 
-    let token_str = claims.sign_with_key(&key).unwrap();
+    let token_str = claims.clone().sign_with_key(&key).unwrap();
+
     (token, token_str)
 }
 
@@ -65,7 +72,6 @@ pub fn validate_user_token(token: String, secret_key: &[u8]) -> Result<bool, Str
         Err(err) => return Err(err),
         Ok(_) => {}
     }
-
     return Ok(true)
 }
 
@@ -86,16 +92,16 @@ pub fn token_into_typed(token: &String, secret_key: &[u8]) -> Result<Token, Stri
         Err(_) => return Err("Error validating user token".to_owned()),
         Ok(res) => res,
     };
-
     let uuid = claims.get("sub").unwrap();
     let exp = match claims.get("exp").unwrap().to_owned().parse::<u64>() {
         Err(err) => return Err(format!("Could not parse exp claim - {}", err)),
         Ok(res) => res
     };
+    println!("{:?}", Duration::from_nanos(exp));
     return Ok(Token {
         sub: uuid.to_owned(),
         public_key: claims.get("public_key").unwrap().to_owned(),
-        exp: Duration::new(exp, 0)
+        exp: Duration::from_nanos(exp)
     })
 }
 
