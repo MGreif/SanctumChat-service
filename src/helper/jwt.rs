@@ -43,8 +43,6 @@ pub fn create_user_token(user: UserDTO, secret_key: &[u8], expires: Duration) ->
         sub: user.username.to_string()
     };
     
-    println!("{:?}", token.clone());
-    println!("{:?}", token.clone());
     claims.insert("sub", token.sub.clone());
     claims.insert("exp", token.exp.as_nanos().to_string().clone());
     claims.insert("public_key", token.public_key.clone());
@@ -97,7 +95,7 @@ pub fn token_into_typed(token: &String, secret_key: &[u8]) -> Result<Token, Stri
         Err(err) => return Err(format!("Could not parse exp claim - {}", err)),
         Ok(res) => res
     };
-    println!("{:?}", Duration::from_nanos(exp));
+
     return Ok(Token {
         sub: uuid.to_owned(),
         public_key: claims.get("public_key").unwrap().to_owned(),
