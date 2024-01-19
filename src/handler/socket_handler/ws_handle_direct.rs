@@ -3,7 +3,7 @@ use std::{sync::Arc, time::SystemTime};
 use async_trait::async_trait;
 use uuid::Uuid;
 use diesel::prelude::*;
-use crate::{config::AppState, models, schema::messages, handler::ws_handler::SocketMessage, helper::jwt::Token};
+use crate::{config::AppState, models, schema::messages, handler::ws_handler::SocketMessage, helper::jwt::Token, repositories::message_repository::MessageRepository, domain::message_domain::MessageDomain};
 
 use super::ws_receive_handler::{Receivable, SocketMessageError};
 
@@ -36,6 +36,11 @@ impl SocketMessageDirect {
 #[async_trait]
 impl Receivable for SocketMessageDirect {
     async fn handle_receive (&self, app_state: Arc<AppState>, token: Token) -> Result<(), super::ws_receive_handler::SocketMessageError> {
+        let message_repo = MessageRepository {
+            pg_pool: app_state.db_pool.get().expect("Could not get db connection to db to save sent message")
+        };
+
+        let mut message_domain = MessageDomain::new(message_repo);
         let recipient = match &self.recipient {
             None => return Err(SocketMessageError::new(String::from("No recipient specified"))),
             Some(r) => r
@@ -44,40 +49,33 @@ impl Receivable for SocketMessageDirect {
         // Get fresh connection to get latest state
         let client_session = app_state.p2p_connections.lock().await.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await.clone();
     
-        let message = SocketMessageDirect::new(
-            Some(token.sub.clone()),
-            Some(recipient.clone()),
+        let direct_message = SocketMessageDirect::new(
+            Some(token.sub),
+            self.recipient.clone(),
             self.message.clone(),
             self.message_signature.clone(),
             self.message_self_encrypted.clone(),
-            self.message_self_encrypted_signature.clone()
-        );
-    
-        let message_clone = message.clone();
-        // Save message in db
-        let message_db = models::Message {
-            content: message_clone.message,
-            content_signature: message_clone.message_signature,
-            content_self_encrypted: message_clone.message_self_encrypted,
-            content_self_encrypted_signature: message_clone.message_self_encrypted_signature,
-            id: Uuid::new_v4(),
-            recipient: recipient.clone(),
-            sender: token.sub.clone(),
-            sent_at: SystemTime::now()
+            self.message_self_encrypted_signature.clone());
+
+        let message = message_domain.direct_message_to_message_entity(&direct_message);
+        let message = match message {
+            Ok(m) => m,
+            Err(err) => return Err(SocketMessageError::new(err))
         };
-    
-    
-        let mut pool = app_state.db_pool.get().expect("Could not get db connection to db to save sent message");
-        diesel::insert_into(messages::table).values(&message_db).execute(&mut pool).expect(format!("Could not save message {:?}", &message_db).as_str());
-    
-        client_session.send_direct_message(SocketMessage::SocketMessageDirect(message.clone())).await;
+
+        match message_domain.save_message(&message) {
+            Err(err) => return Err(err),
+            Ok(_) => {}
+        };
+        
+        client_session.send_direct_message(SocketMessage::SocketMessageDirect(direct_message.clone())).await;
     
         let p2p = app_state.p2p_connections.lock().await.clone();
         let recipient_session_manager = p2p.get(recipient).clone();
         match recipient_session_manager {
             None => {},
             Some(sm) => {
-                sm.lock().await.send_direct_message(SocketMessage::SocketMessageDirect(message.clone())).await;
+                sm.lock().await.send_direct_message(SocketMessage::SocketMessageDirect(direct_message.clone())).await;
                 
             }
         }

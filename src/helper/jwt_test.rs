@@ -16,8 +16,8 @@ pub fn test_create_user_token() {
     let secret_key = String::from("abc");
     let secret_key = secret_key.as_bytes();
 
-    let (valid_for, valid_for_claim) = generate_token_expiration(Duration::new(15*60, 0));
-    let (token, token_str) = create_user_token(user, secret_key, valid_for);
+    let (valid_for, _) = generate_token_expiration(Duration::new(15*60, 0));
+    let (token, _) = create_user_token(user, secret_key, valid_for);
 
     let token_expect = Token {
         exp: valid_for,

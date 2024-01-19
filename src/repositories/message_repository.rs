@@ -6,6 +6,7 @@ use crate::{models::Message, schema::messages::{sender, sent_at, all_columns, se
 
 pub trait MessageRepositoryInterface {
     fn get_messages(&mut self, username: &String, origin: &String, pagination: Pagination) -> Result<Vec<Message>, String>;
+    fn save_message(&mut self, message: &Message) -> Result<(), String>;
 }
 
 pub struct MessageRepository {
@@ -40,5 +41,17 @@ impl MessageRepositoryInterface for MessageRepository {
 
 
         Ok(db_messages)
+    }
+    fn save_message(&mut self, message: &Message) -> Result<(), String> {
+        let result = diesel::insert_into(messages::table).values(message).execute(&mut self.pg_pool);
+        let result = match result {
+            Err(err) => return Err(format!("Could not save message {:?}: {}", message, err)),
+            Ok(res) => res
+        };
+
+        if result == 0 {
+            return Err(String::from("Inserted 0 items, maybe mistake??"))
+        };
+        return Ok(())
     }
 }

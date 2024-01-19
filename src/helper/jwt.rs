@@ -1,7 +1,6 @@
 use hmac::{Hmac, Mac};
 use jwt::{SignWithKey, VerifyWithKey};
 use sha2::Sha256;
-use tracing::info;
 use std::{collections::BTreeMap, time::{SystemTime, UNIX_EPOCH, Duration}, ops::Add};
 use serde::{Deserialize, Serialize};
 
