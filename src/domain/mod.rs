@@ -4,3 +4,4 @@ pub mod friend_request_domain;
 pub mod friend_domain;
 pub mod friend_request_domain_test;
 pub mod message_domain;
+pub mod message_domain_test;

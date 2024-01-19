@@ -1,9 +1,7 @@
-use std::{sync::Arc, time::SystemTime};
-
+use std::sync::Arc;
 use async_trait::async_trait;
-use uuid::Uuid;
 use diesel::prelude::*;
-use crate::{config::AppState, models, schema::messages, handler::ws_handler::SocketMessage, helper::jwt::Token, repositories::message_repository::MessageRepository, domain::message_domain::MessageDomain};
+use crate::{config::AppState, handler::ws_handler::SocketMessage, helper::jwt::Token, repositories::{message_repository::MessageRepository, friend_repository::FriendRepository}, domain::{message_domain::MessageDomain, friend_domain::FriendDomain}};
 
 use super::ws_receive_handler::{Receivable, SocketMessageError};
 
@@ -36,15 +34,29 @@ impl SocketMessageDirect {
 #[async_trait]
 impl Receivable for SocketMessageDirect {
     async fn handle_receive (&self, app_state: Arc<AppState>, token: Token) -> Result<(), super::ws_receive_handler::SocketMessageError> {
-        let message_repo = MessageRepository {
+                let message_repo = MessageRepository {
             pg_pool: app_state.db_pool.get().expect("Could not get db connection to db to save sent message")
         };
 
+        let friend_repo = FriendRepository {
+            pg_pool: app_state.db_pool.get().expect("Could not get db connection to db to save sent message")
+        };
+
+        let mut friend_domain = FriendDomain::new(friend_repo);
         let mut message_domain = MessageDomain::new(message_repo);
         let recipient = match &self.recipient {
             None => return Err(SocketMessageError::new(String::from("No recipient specified"))),
             Some(r) => r
         };
+
+        let has_friend = match friend_domain.check_if_user_has_friend(&token.sub, recipient) {
+            Ok(res) => res,
+            Err(_) => return Err(SocketMessageError::new(String::from("Uuups, something went wrong..")))
+        };
+
+        if has_friend == false {
+            return Err(SocketMessageError::new(format!("You are not befriended with {}", recipient)))
+        }
         
         // Get fresh connection to get latest state
         let client_session = app_state.p2p_connections.lock().await.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await.clone();

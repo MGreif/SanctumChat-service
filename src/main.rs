@@ -1,6 +1,6 @@
 use core::time;
 use std::sync::Arc;
-use axum::{http::{Method, StatusCode}, response::IntoResponse, BoxError};
+use axum::{http::{Method, StatusCode}, response::IntoResponse, BoxError, extract::connect_info::MockConnectInfo};
 use config::{EnvConfig, AppState};
 use diesel::r2d2::{ConnectionManager, Pool};
 use helper::errors::HTTPResponse;

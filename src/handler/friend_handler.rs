@@ -117,7 +117,7 @@ pub async fn get_friends(State(app_state): State<Arc<AppState>>, token: Extensio
     let mut friendDomain = FriendDomain::new(friend_repository);
     let result = match friendDomain.get_friends(&token.sub) {
         Ok(res) => res,
-        Err(err) => return err.into_response()
+        Err(err) => return HTTPResponse::<()>::new_internal_error(err).into_response()
     };
 
     return HTTPResponse::<Vec<UserDTOSanitized>> {

@@ -7,7 +7,7 @@ use futures::{sink::SinkExt, stream::StreamExt, lock::Mutex};
 use serde_json::{from_str, to_string};
 use tracing::info;
 use uuid::Uuid;
-use crate::{config::AppState, handler::socket_handler::ws_receive_handler::ws_receive_handler, helper::jwt::{token_into_typed, validate_user_token}};
+use crate::{config::AppState, handler::socket_handler::ws_receive_handler::{ws_receive_handler, SocketMessageError}, helper::jwt::{token_into_typed, validate_user_token}};
 use super::socket_handler::ws_handle_direct::SocketMessageDirect;
 
 
@@ -158,7 +158,7 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
     }
 
     let mess = SocketMessage::SocketMessageOnlineUsers(SocketMessageOnlineUsers::new(online_friends));
-    sender.lock().await.send(Message::Text(to_string(&mess).unwrap())).await.expect("Failed sending joining message");
+    sender.lock().await.send(Message::Text(to_string(&mess).unwrap())).await.expect("Failed sending online_friends message");
 
     let sender_in_receiver = sender.clone();
 
@@ -177,7 +177,16 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
     let token = token.clone();
     let mut receive_task = tokio::spawn(async move {
         while let Some(Ok(Message::Text(text))) = receiver.next().await {
-            let message: SocketMessage = from_str(&text).expect(&format!("Could not deserialize {}", text));
+            let message = from_str(&text);
+            let message = match message {
+                Ok(m) => m,
+                Err(_) => {
+                    let mut sender = sender_in_receiver.lock().await;
+                    let message = SocketMessageError::new(format!("Could not deserialize {}", text));
+                    sender.send(Message::Text(to_string(&message).unwrap())).await.unwrap();
+                    continue;
+                }
+            };
 
             if let Err(err) = ws_receive_handler(message, app_state_clone.clone(), token.clone()).await {
                 let mut sender_in_receiver = sender_in_receiver.lock().await;

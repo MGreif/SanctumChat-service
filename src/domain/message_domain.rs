@@ -2,7 +2,9 @@ use std::time::SystemTime;
 
 use uuid::Uuid;
 
-use crate::{repositories::message_repository::MessageRepositoryInterface, models::Message, helper::{errors::HTTPResponse, pagination::Pagination}, handler::socket_handler::{ws_handle_direct::SocketMessageDirect, ws_receive_handler::SocketMessageError}};
+use crate::{repositories::{message_repository::MessageRepositoryInterface, friend_repository::FriendRepository}, models::Message, helper::{errors::HTTPResponse, pagination::Pagination}, handler::socket_handler::{ws_handle_direct::SocketMessageDirect, ws_receive_handler::SocketMessageError}};
+
+use super::friend_domain::{self, FriendDomain};
 
 
 pub struct MessageDomain<I: MessageRepositoryInterface> {
