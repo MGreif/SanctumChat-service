@@ -37,6 +37,7 @@ diesel::table! {
         content_signature -> Varchar,
         #[max_length = 1024]
         content_self_encrypted_signature -> Varchar,
+        is_read -> Bool,
     }
 }
 

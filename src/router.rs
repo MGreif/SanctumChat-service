@@ -7,6 +7,7 @@ use crate::{handler::{message_handler, friend_handler, user_handler, version_han
 
 pub fn get_main_router(app_state: &Arc<AppState>, config: ConfigManager, cors: CorsLayer) -> Router {
     let main = Router::new()
+        .route("/messages/read", patch(message_handler::set_messages_read))
         .route("/messages", get(message_handler::get_messages))
         .route("/friends/active", get(friend_handler::get_active_friends))
         .route("/friends", get(friend_handler::get_friends))

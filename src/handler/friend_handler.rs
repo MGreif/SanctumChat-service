@@ -8,7 +8,7 @@ use crate::domain::friend_request_domain::FriendRequestDomain;
 use crate::helper::jwt::Token;
 use crate::models::{FriendRequest, UserDTOSanitized};
 use crate::config::AppState;
-use crate::repositories::friend_repository::FriendRepository;
+use crate::repositories::friend_repository::{FriendRepository, FriendDTO};
 use crate::repositories::friend_request_repository::FriendRequestRepository;
 use diesel::prelude::*;
 use crate::handler::ws_handler::{SocketMessage, SocketMessageFriendRequest};
@@ -120,7 +120,7 @@ pub async fn get_friends(State(app_state): State<Arc<AppState>>, token: Extensio
         Err(err) => return HTTPResponse::<()>::new_internal_error(err).into_response()
     };
 
-    return HTTPResponse::<Vec<UserDTOSanitized>> {
+    return HTTPResponse::<Vec<FriendDTO>> {
         status: StatusCode::OK,
         data: Some(result),
         message: None

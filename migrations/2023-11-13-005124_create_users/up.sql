@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS messages (
   content_self_encrypted varchar(1024) NOT NULL,
   content_signature varchar(1024) NOT NULL,
   content_self_encrypted_signature varchar(1024) NOT NULL,
+  is_read BOOLEAN NOT NULL DEFAULT false,
   PRIMARY KEY(id),
   CONSTRAINT fk_sender FOREIGN KEY(sender) REFERENCES users(username) ON DELETE CASCADE,
   CONSTRAINT fk_recipient FOREIGN KEY(recipient) REFERENCES users(username) ON DELETE CASCADE

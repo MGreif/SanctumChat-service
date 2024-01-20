@@ -1,9 +1,13 @@
+use std::str::FromStr;
 use std::sync::Arc;
 
-use axum::Extension;
+use axum::{Extension, Json};
 use axum::extract::Query;
 use axum::http::StatusCode;
 use axum::{response::IntoResponse, extract::State};
+use diesel::sql_types::Uuid;
+use openssl::pkey::Params;
+use serde::{Deserialize, Serialize};
 use crate::config::AppState;
 use crate::domain::message_domain::MessageDomain;
 use crate::helper::errors::HTTPResponse;
@@ -36,4 +40,39 @@ pub async fn get_messages(State(app_state): State<Arc<AppState>>, Query(query): 
         }.into_response(),
         Err(err) => err.into_response()
     }
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct SetMessageReadRequestQuery {
+    pub ids: Vec<String>,
+}
+
+pub async fn set_messages_read(State(app_state): State<Arc<AppState>>, token: Extension<Token>, Json(body): Json<SetMessageReadRequestQuery>) -> impl IntoResponse {
+    let repo = MessageRepository {
+        pg_pool: app_state.db_pool.get().expect("[get_messages] Could not get db pool")
+    };
+    let mut domain = MessageDomain::new(repo);
+
+    let mut uuids: Vec<uuid::Uuid> = vec![];
+
+    for string in body.ids {
+        match uuid::Uuid::from_str(&string) {
+            Err(_) => return HTTPResponse::<()>::new_internal_error(format!("Could not parse {} as uuid", &string)).into_response(),
+            Ok(res) => uuids.push(res.clone())
+        };
+    }
+
+
+
+    let result = domain.set_message_read(&uuids, &true, &token.sub);
+
+    match result {
+        Ok(_) => HTTPResponse::<()> {
+            message: Some(String::from("Successfully edited messages")),
+            data: None,
+            status: StatusCode::OK
+        }.into_response(),
+        Err(_) => HTTPResponse::<()>::new_internal_error(String::from("Could not edit messages")).into_response()
+    }
+
 }

@@ -1,8 +1,9 @@
-use crate::{repositories::friend_repository::FriendRepositoryInterface, models::UserDTOSanitized, helper::errors::HTTPResponse};
+use crate::{repositories::{friend_repository::{FriendRepositoryInterface, FriendDTO}, message_repository::MessageRepositoryInterface}, models::UserDTOSanitized, helper::errors::HTTPResponse};
 
 pub struct FriendDomain<I: FriendRepositoryInterface> {
     friend_repository: I
 }
+
 
 impl<I: FriendRepositoryInterface> FriendDomain<I> {
     pub fn new(friend_repository: I) -> Self {
@@ -23,7 +24,7 @@ impl<I: FriendRepositoryInterface> FriendDomain<I> {
         }
     }
 
-    pub fn get_friends(&mut self, username: &String) -> Result<Vec<UserDTOSanitized>, String> {
+    pub fn get_friends(&mut self, username: &String) -> Result<Vec<FriendDTO>, String> {
         match self.friend_repository.get_friends(username) {
             Ok(res) => Ok(res),
             Err(err) => Err(err)

@@ -2,9 +2,8 @@ use std::time::SystemTime;
 
 use uuid::Uuid;
 
-use crate::{repositories::{message_repository::MessageRepositoryInterface, friend_repository::FriendRepository}, models::Message, helper::{errors::HTTPResponse, pagination::Pagination}, handler::socket_handler::{ws_handle_direct::SocketMessageDirect, ws_receive_handler::SocketMessageError}};
+use crate::{repositories::message_repository::MessageRepositoryInterface, models::Message, helper::{errors::HTTPResponse, pagination::Pagination}, handler::socket_handler::{ws_handle_direct::SocketMessageDirect, ws_receive_handler::SocketMessageError}};
 
-use super::friend_domain::{self, FriendDomain};
 
 
 pub struct MessageDomain<I: MessageRepositoryInterface> {
@@ -46,6 +45,7 @@ impl<I: MessageRepositoryInterface> MessageDomain<I> {
             content_self_encrypted_signature: direct_message.message_self_encrypted_signature,
             id: Uuid::new_v4(),
             recipient: recipient,
+            is_read: false,
             sender: sender,
             sent_at: SystemTime::now()
         };
@@ -57,6 +57,14 @@ impl<I: MessageRepositoryInterface> MessageDomain<I> {
         let result = self.message_repository.save_message(message);
         match result {
             Err(err) => return Err(SocketMessageError::new(err)),
+            Ok(res) => Ok(res)
+        }
+    }
+
+    pub fn set_message_read(&mut self, message_ids: &Vec<Uuid>, is_read: &bool, issuer: &String) -> Result<(), String> {
+        let result = self.message_repository.set_message_read(message_ids, is_read, issuer);
+        match result {
+            Err(err) => return Err(err),
             Ok(res) => Ok(res)
         }
     }

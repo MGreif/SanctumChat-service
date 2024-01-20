@@ -1,12 +1,16 @@
-use diesel::{r2d2::{PooledConnection, ConnectionManager}, PgConnection};
+use diesel::{r2d2::{PooledConnection, ConnectionManager}, PgConnection, sql_types::Array};
 use diesel::prelude::*;
 use diesel::query_dsl::*;
+use uuid::Uuid;
 use crate::{models::Message, schema::messages::{sender, sent_at, all_columns, self, recipient}, helper::pagination::Pagination};
+use diesel::prelude::*;
+use diesel::query_dsl::*;
 
 
 pub trait MessageRepositoryInterface {
     fn get_messages(&mut self, username: &String, origin: &String, pagination: Pagination) -> Result<Vec<Message>, String>;
     fn save_message(&mut self, message: &Message) -> Result<(), String>;
+    fn set_message_read(&mut self, ids: &Vec<Uuid>, is_read: &bool, issuer: &String) -> Result<(), String>;
 }
 
 pub struct MessageRepository {
@@ -46,6 +50,29 @@ impl MessageRepositoryInterface for MessageRepository {
         let result = diesel::insert_into(messages::table).values(message).execute(&mut self.pg_pool);
         let result = match result {
             Err(err) => return Err(format!("Could not save message {:?}: {}", message, err)),
+            Ok(res) => res
+        };
+
+        if result == 0 {
+            return Err(String::from("Inserted 0 items, maybe mistake??"))
+        };
+        return Ok(())
+    }
+
+    fn set_message_read(&mut self, ids: &Vec<Uuid>, is_read: &bool, issuer: &String) -> Result<(), String> {
+        let result = diesel::sql_query("
+            UPDATE messages
+            SET is_read = $1
+            WHERE id = $2
+            AND recipient = $3
+            "
+        ).bind::<Array<diesel::sql_types::Uuid>, _>(ids)
+        .bind::<diesel::sql_types::Bool, _>(is_read)
+        .bind::<diesel::sql_types::Text, _>(issuer)
+        .execute(&mut self.pg_pool);
+
+        let result = match result {
+            Err(err) => return Err(format!("Could not update messages: {}", err)),
             Ok(res) => res
         };
 

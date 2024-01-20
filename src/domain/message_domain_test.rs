@@ -10,6 +10,10 @@ impl MessageRepositoryInterface for MessageRepositoryMock {
     fn save_message(&mut self, _: &crate::models::Message) -> Result<(), String> {
         return Ok(())
     }
+
+    fn set_message_read(&mut self, ids: &Vec<uuid::Uuid>, is_read: &bool, issuer: &String) -> Result<(), String> {
+        return Ok(())
+    }
 }
 
 

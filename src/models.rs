@@ -1,6 +1,6 @@
 use std::time::SystemTime;
 
-use diesel::{alias, QueryableByName};
+use diesel::{alias, QueryableByName, sql_types::Bool};
 use uuid::Uuid;
 use crate::schema;
 
@@ -47,6 +47,7 @@ pub struct Message {
     pub content_self_encrypted: String,
     pub content_signature: String,
     pub content_self_encrypted_signature: String,
+    pub is_read: bool,
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize, diesel::Queryable, diesel::Selectable, diesel::Insertable, Clone)]
