@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, str::from_utf8};
 use axum::{extract::{Json, State}, response::IntoResponse, http::{HeaderMap, header::{SET_COOKIE, self}, StatusCode}, Extension};
 use tracing::info;
 use crate::{helper::{session::SessionManager, jwt::{Token, hash_string}, keys::{generate_rsa_key_pair, validate_public_key}}, repositories::user_repository::UserRepository, domain::user_domain::UserDomain, models::UserDTO};
@@ -49,10 +49,30 @@ pub async fn create_user<'a>(State(state): State<Arc<AppState>>, Json(body): Jso
     }
 
     let mut private_key: Option<Vec<u8>> = None;
-    let mut pub_key: Vec<u8> =  body.public_key.as_bytes().to_vec();
+    let mut pub_key: Vec<u8> =  body.public_key.as_bytes().to_vec().clone();
 
-    if body.generate_key == false && !body.public_key.is_empty() {
-        match validate_public_key(body.public_key) {
+    let pub_key_decoded = base64::engine::general_purpose::STANDARD.decode(body.public_key);
+    let pub_key_decoded = match pub_key_decoded {
+        Ok(r) => r,
+        Err(err) => return (headers, HTTPResponse {
+            message: Some(format!("Public key encoding failed: {}", err)),
+            data: None,
+            status: StatusCode::BAD_REQUEST
+        })
+    };
+
+/*     #let pub_key_decoded = match from_utf8(&pub_key_decoded) {
+        Ok(r) => r,
+        Err(err) => return (headers, HTTPResponse {
+            message: Some(format!("Public key encoding failed: {}", err)),
+            data: None,
+            status: StatusCode::BAD_REQUEST
+        })
+    }; */
+
+
+    if body.generate_key == false {
+        match validate_public_key(&pub_key_decoded) {
             Err(_) => return (headers, HTTPResponse {
                 data: None,
                 message: Some(String::from("Could not validate public key. Ensure that its using .PEM PKCS#8 format")),

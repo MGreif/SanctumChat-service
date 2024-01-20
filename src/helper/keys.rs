@@ -1,7 +1,7 @@
 use openssl::rsa::Rsa;
 
 pub fn validate_private_key(private_key_string: String) -> Result<(), ()> {
-    let private_key_regex = regex::Regex::new(r"^-----BEGIN PRIVATE KEY-----[A-z]+-----END PRIVATE KEY-----$").unwrap();
+    let private_key_regex = regex::Regex::new(r"^-----BEGIN PRIVATE KEY-----[A-z\/]+-----END PRIVATE KEY-----$").unwrap();
 
     match private_key_regex.captures(&private_key_string) {
         None => Err(()),
@@ -9,12 +9,11 @@ pub fn validate_private_key(private_key_string: String) -> Result<(), ()> {
     }
 }
 
-pub fn validate_public_key(private_key_string: String) -> Result<(), ()> {
-    let private_key_regex = regex::Regex::new(r"^-----BEGIN PUBLIC KEY-----[A-z]+-----END PUBLIC KEY-----$").unwrap();
-
-    match private_key_regex.captures(&private_key_string) {
-        None => Err(()),
-        Some(_) => Ok(()) 
+pub fn validate_public_key(public_key_string: &Vec<u8>) -> Result<(), ()> {
+    let res = Rsa::public_key_from_pem(public_key_string);
+    match res {
+        Ok(_) => Ok(()),
+        Err(_) => Err(())
     }
 }
 
