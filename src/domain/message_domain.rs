@@ -43,7 +43,7 @@ impl<I: MessageRepositoryInterface> MessageDomain<I> {
             content_signature: direct_message.message_signature,
             content_self_encrypted: direct_message.message_self_encrypted,
             content_self_encrypted_signature: direct_message.message_self_encrypted_signature,
-            id: Uuid::new_v4(),
+            id: direct_message.id.unwrap_or(Uuid::new_v4()),
             recipient: recipient,
             is_read: false,
             sender: sender,

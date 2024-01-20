@@ -8,6 +8,7 @@ use axum::{response::IntoResponse, extract::State};
 use diesel::sql_types::Uuid;
 use openssl::pkey::Params;
 use serde::{Deserialize, Serialize};
+use tracing::info;
 use crate::config::AppState;
 use crate::domain::message_domain::MessageDomain;
 use crate::helper::errors::HTTPResponse;
@@ -62,8 +63,6 @@ pub async fn set_messages_read(State(app_state): State<Arc<AppState>>, token: Ex
         };
     }
 
-
-
     let result = domain.set_message_read(&uuids, &true, &token.sub);
 
     match result {
@@ -72,7 +71,7 @@ pub async fn set_messages_read(State(app_state): State<Arc<AppState>>, token: Ex
             data: None,
             status: StatusCode::OK
         }.into_response(),
-        Err(_) => HTTPResponse::<()>::new_internal_error(String::from("Could not edit messages")).into_response()
+        Err(err) => HTTPResponse::<()>::new_internal_error(String::from(err)).into_response()
     }
 
 }

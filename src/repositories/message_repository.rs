@@ -63,11 +63,12 @@ impl MessageRepositoryInterface for MessageRepository {
         let result = diesel::sql_query("
             UPDATE messages
             SET is_read = $1
-            WHERE id = $2
+            WHERE id = ANY($2)
             AND recipient = $3
             "
-        ).bind::<Array<diesel::sql_types::Uuid>, _>(ids)
+        )
         .bind::<diesel::sql_types::Bool, _>(is_read)
+        .bind::<Array<diesel::sql_types::Uuid>, _>(ids)
         .bind::<diesel::sql_types::Text, _>(issuer)
         .execute(&mut self.pg_pool);
 

@@ -20,6 +20,10 @@ impl MessageRepositoryInterface for MessageRepositoryMock {
 
 
 pub mod message_integration_tests {
+    use std::str::FromStr;
+
+    use uuid::Uuid;
+
     use crate::{domain::message_domain::MessageDomain, handler::socket_handler::ws_handle_direct::SocketMessageDirect};
 
     use super::MessageRepositoryMock;
@@ -31,6 +35,7 @@ pub mod message_integration_tests {
         let mut direct_message = SocketMessageDirect {
             TYPE: Some(String::from("SOCKET_MESSAGE_DIRECT")),
             message: String::from("Message"),
+            id: Some(Uuid::from_str("18cb8735-b226-49d5-a726-e6937bd6e841").unwrap()),
             message_self_encrypted: String::from("Message_self encrypted"),
             message_self_encrypted_signature: String::from("Message_self encrypted signature"),
             message_signature: String::from("Message signature"),

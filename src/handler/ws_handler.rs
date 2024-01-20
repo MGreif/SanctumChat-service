@@ -178,7 +178,7 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
     let token = token.clone();
     let mut receive_task = tokio::spawn(async move {
         while let Some(Ok(Message::Text(text))) = receiver.next().await {
-            let message = from_str(&text);
+            let message: Result<SocketMessage, serde_json::Error> = from_str(&text);
             let message = match message {
                 Ok(m) => m,
                 Err(_) => {

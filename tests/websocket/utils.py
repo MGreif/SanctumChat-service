@@ -5,8 +5,6 @@ import random
 backend_base_url = "localhost:3000/api"
 
 
-
-
 def build_path(path: str, scheme = "http"):
     return scheme + "://" + backend_base_url + path
 
@@ -21,20 +19,23 @@ def establish_websocket_connection(token: str):
     connection = websocket.create_connection(build_path("/ws?token="+token, "ws"))
     return connection
 
+def compare(info: str, result: str, expect: str):
+    assert result == expect, info + " assertion did not work"
+    print("✔ - " + info)
+
 
 def send_and_receive_message(info: str, connection: websocket.WebSocket, send: str, expect: str):
     print(f"[{info}] --> {send}")
     connection.send(send)
     result = connection.recv()
     print(f"[{info}] <-- {result}")
-    assert result == expect, info + " assertion did not work"
-    print("✔ - " + info)
+    compare(info, result, expect=expect)
 
 def receive_message(info: str, connection: websocket.WebSocket, expect: str):
     result = connection.recv()
     print(f"[{info}] <-- {result}")
-    assert result == expect, info + " assertion did not work"
-    print("✔ - " + info)
+    compare(info, result, expect=expect)
+
 
 
 

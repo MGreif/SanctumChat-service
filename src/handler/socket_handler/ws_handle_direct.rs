@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use async_trait::async_trait;
 use diesel::prelude::*;
+use uuid::Uuid;
 use crate::{config::AppState, handler::ws_handler::SocketMessage, helper::jwt::Token, repositories::{message_repository::MessageRepository, friend_repository::FriendRepository}, domain::{message_domain::MessageDomain, friend_domain::FriendDomain}};
 
 use super::ws_receive_handler::{Receivable, SocketMessageError};
@@ -14,6 +15,7 @@ pub struct SocketMessageDirect {
     pub message_signature: String,
     pub message_self_encrypted: String,
     pub message_self_encrypted_signature: String,
+    pub id: Option<Uuid>,
     pub TYPE: Option<String>
 }
 
@@ -24,6 +26,7 @@ impl SocketMessageDirect {
             message_signature,
             message_self_encrypted,
             message_self_encrypted_signature,
+            id: Some(Uuid::new_v4()),
             recipient,
             sender,
             TYPE: Some(String::from("SOCKET_MESSAGE_DIRECT"))
