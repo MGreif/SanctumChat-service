@@ -23,11 +23,19 @@ def establish_websocket_connection(token: str):
 
 
 def send_and_receive_message(info: str, connection: websocket.WebSocket, send: str, expect: str):
+    print(f"[{info}] --> {send}")
     connection.send(send)
     result = connection.recv()
-    print(info + " --> " + send)
-    print(info + " <-- " + result)
+    print(f"[{info}] <-- {result}")
     assert result == expect, info + " assertion did not work"
+    print("✔ - " + info)
+
+def receive_message(info: str, connection: websocket.WebSocket, expect: str):
+    result = connection.recv()
+    print(f"[{info}] <-- {result}")
+    assert result == expect, info + " assertion did not work"
+    print("✔ - " + info)
+
 
 
 def login(user):
