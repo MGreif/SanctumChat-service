@@ -53,7 +53,7 @@ impl<I: UserRepositoryInterface> UserDomain<I> {
             })
         };
 
-        let (valid_for, _) = generate_token_expiration(Duration::new(1*60, 0));
+        let (valid_for, _) = generate_token_expiration(Duration::new(15*60, 0));
         
         let (token, token_str) = create_user_token(user.clone(), hashing_key, valid_for);
 
@@ -67,7 +67,7 @@ impl<I: UserRepositoryInterface> UserDomain<I> {
             Ok(user) => user
         };
 
-        let (valid_for, _) = generate_token_expiration(Duration::new(1*60, 0));
+        let (valid_for, _) = generate_token_expiration(Duration::new(15*60, 0));
 
         let (token, token_str) = create_user_token(user.clone(), hashing_key, valid_for);
 

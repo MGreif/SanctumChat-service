@@ -31,8 +31,7 @@ impl<'a> SessionManager {
     }
     pub async fn notify_online(&self) {
         let friends_in_p2p = self.app_state.get_friends_in_p2p(&self.user.username).await;
-        for (friend_id, friend_session_manager) in friends_in_p2p {
-            info!("{friend_id}");
+        for (_, friend_session_manager) in friends_in_p2p {
             let friend_session_manager = friend_session_manager.lock().await;
             friend_session_manager.send_direct_message(
                 SocketMessage::SocketMessageStatusChange(SocketMessageStatusChange::new(EEvent::ONLINE, self.user.username.clone()))
@@ -42,8 +41,7 @@ impl<'a> SessionManager {
 
     pub async fn notify_offline(&self) {
         let friends_in_p2p = self.app_state.get_friends_in_p2p(&self.user.username).await;
-        for (friend_id, friend_session_manager) in friends_in_p2p {
-            info!("{friend_id}");
+        for (_, friend_session_manager) in friends_in_p2p {
             let friend_session_manager = friend_session_manager.lock().await;
             friend_session_manager.send_direct_message(
                 SocketMessage::SocketMessageStatusChange(SocketMessageStatusChange::new(EEvent::OFFLINE, self.user.username.clone()))

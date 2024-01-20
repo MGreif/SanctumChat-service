@@ -1,12 +1,18 @@
-import requests
-import websocket
 import single_connection_tests
 import utils
 import dual_connection_tests
 import os
 import base64
-import sys
 
+
+## These tests are designed to be fired against a working sanctum-chat service
+## with a connected database.
+## So keep in mind, that it will populate the users due to registering new users for each walkthrough
+## Deleting the users will be added once a user can delete his own account!
+
+
+## Do not run in pipeline, if the app is stuck in a deadlock, the python app will never exit lol
+## This will be improved
 
 user1 = {
     "username": "test-user-1-" + utils.get_random_id(),

@@ -153,7 +153,6 @@ pub async fn login<'a>(State(state): State<Arc<AppState>>, Json(body): Json<Logi
 
     match DEFAULT_INPUT_FIELD_STRING_VALIDATOR.validate(&username_id) {
         Err(err) => {
-            info!("{} - Validation error: {}", "name", err);
             return (headers, HTTPResponse::<()> {
                 data: None,
                 message: Some(String::from("Login failed lol, changeme")),
@@ -165,7 +164,6 @@ pub async fn login<'a>(State(state): State<Arc<AppState>>, Json(body): Json<Logi
 
     match DEFAULT_INPUT_FIELD_STRING_VALIDATOR.validate(&pw) {
         Err(err) => {
-            info!("{} - Validation error: {}", "name", err);
             return (headers, HTTPResponse::<()> {
                 data: None,
                 message: Some(String::from("Login failed lol, changeme")),

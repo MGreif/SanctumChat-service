@@ -14,8 +14,6 @@ pub async fn bearer_token_validation<'a>( State(app_state): State<Arc<AppState>>
         }
     };
 
-    info!("middleware");
-
     match validate_user_token(auth_header, app_state.config.env.HASHING_KEY.as_bytes()) {
         Err(_) => return Err(StatusCode::UNAUTHORIZED),
         Ok(_) => {},

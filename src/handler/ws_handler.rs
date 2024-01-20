@@ -127,7 +127,8 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
     let is_validated_result = validate_user_token(query.token.clone(), &app_state_orig.config.env.HASHING_KEY.as_bytes());
     match is_validated_result {
         Err(_) => {
-            match sender.lock().await.send(Message::Text(String::from("Not authorized"))).await {
+            let message = SocketMessageError::new(String::from("You are not authenticated"));
+            match sender.lock().await.send(Message::Text(to_string(&message).expect("Could not serialize message"))).await {
                 Err(err) => info!("{}", err),
                 Ok(_) => {}
             };
@@ -202,7 +203,7 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
             sender_receive_task.abort();
             match app_state_clone2.remove_from_p2p(&token2.sub).await {
                 Ok(_) => {},
-                Err(err) => info!("Error ocurred removing user from p2p: {}; Maybe the user session expired", err)
+                Err(err) => return info!("Error ocurred removing user from p2p: {}; Maybe the user session expired", err)
             };
         },
         _ = (&mut sender_receive_task) => {

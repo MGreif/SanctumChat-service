@@ -60,7 +60,7 @@ def register(user, public_key):
     print(json)
 
 def get_random_id():
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=10))
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=14))
 
 
 def send_friend_request(token: str, username: str):
