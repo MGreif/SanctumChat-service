@@ -38,7 +38,7 @@ impl FriendRepositoryInterface for FriendRepository {
             LEFT JOIN users
             ON f.befriended_user_id = users.username
             LEFT JOIN messages
-            ON f.befriended_user_id = messages.sender
+            ON f.befriended_user_id = messages.sender AND messages.recipient = $1
             WHERE f.user_id = $1
             GROUP BY users.username"
         )
