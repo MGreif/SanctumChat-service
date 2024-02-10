@@ -1,6 +1,6 @@
 [package]
 name = "sanctumchat-service"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -14,7 +14,7 @@ axum = { version = "0.7.2", features = ["ws"]}
 serde = { version = "1.0.192", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1.40"
-tracing-subscriber = "0.3.17"
+tracing-subscriber = { version = "0.3.17", features = ["json"] }
 serde_json = "1"
 diesel = { version = "2.1.3", features = ["postgres", "r2d2", "uuid"] }
 dotenv = "0.15"
@@ -31,7 +31,7 @@ hmac = "0.12.1"
 hex = "0.4.3"
 cookie = "0.18.0"
 axum-util = { version = "0.2.2" }
-tower-http = { version = "0.5.0", features = ["cors"] }
+tower-http = { version = "0.5.0", features = ["cors", "trace"] }
 async-trait = "0.1.74"
 regex = "1.10.2"
 

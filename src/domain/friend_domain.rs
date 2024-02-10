@@ -1,4 +1,4 @@
-use crate::{repositories::{friend_repository::{FriendRepositoryInterface, FriendDTO}, message_repository::MessageRepositoryInterface}, models::UserDTOSanitized, helper::errors::HTTPResponse};
+use crate::repositories::friend_repository::{FriendRepositoryInterface, FriendDTO};
 
 pub struct FriendDomain<I: FriendRepositoryInterface> {
     friend_repository: I

@@ -1,5 +1,6 @@
 
-POSTGRES_CONTAINER=some-postgres
+POSTGRES_CONTAINER=sanctumchat-postgres
+
 
 .PHONY: start-dependencies
 start-dependencies:
@@ -8,7 +9,9 @@ start-dependencies:
 start-service: start-dependencies
 		cargo run
 
-.PHONY: start-python-tests
-start-python-tests:
+start-python-tests: run-migration
 		python3 tests/websocket/test.py
+
+run-migration:
+	diesel migration run
 

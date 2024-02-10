@@ -1,6 +1,6 @@
 use std::time::SystemTime;
 
-use diesel::{alias, QueryableByName, sql_types::Bool};
+use diesel::{alias, QueryableByName};
 use uuid::Uuid;
 use crate::schema;
 

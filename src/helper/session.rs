@@ -2,7 +2,7 @@ use std::sync::Arc;
 use tracing::info;
 use crate::{models::UserDTO, handler::ws_handler::{SocketMessage, SocketMessageStatusChange, EEvent}, config::AppState};
 use tokio::sync::broadcast;
-
+use tracing::error;
 use super::jwt::Token;
 
 #[derive(Debug, Clone)]
@@ -25,7 +25,7 @@ impl<'a> SessionManager {
 
     pub async fn send_direct_message(&self, message: SocketMessage) {
         match self.user_socket.send(message)  {
-            Err(err) => info!("Error, probably no listeners {}", err),
+            Err(err) => error!("Error, probably no listeners {}", err),
             Ok(_) => {}
         };
     }
