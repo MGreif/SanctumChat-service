@@ -1,5 +1,6 @@
-use std::{sync::Arc};
-use axum::{response::IntoResponse, http::StatusCode, extract::State};
+use std::{os::unix::net::SocketAddr, sync::Arc};
+use axum::{extract::{ConnectInfo, State}, http::StatusCode, response::IntoResponse};
+use tracing::info;
 
 use crate::{helper::errors::HTTPResponse, config::AppState};
 

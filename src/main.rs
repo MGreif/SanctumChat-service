@@ -1,6 +1,6 @@
 use core::time;
 use std::{fs::File, io::{self, stdout}, os::{self, unix::process}, process::exit, sync::Arc};
-use axum::{http::{request, HeaderValue, Method, StatusCode}, response::IntoResponse, BoxError, extract::connect_info::MockConnectInfo};
+use axum::{extract::{connect_info::MockConnectInfo, ConnectInfo}, http::{request, HeaderValue, Method, StatusCode}, response::IntoResponse, BoxError, ServiceExt};
 use config::{EnvConfig, AppState};
 use diesel::r2d2::{ConnectionManager, Pool};
 use helper::errors::HTTPResponse;
@@ -22,10 +22,12 @@ mod domain;
 mod router;
 mod models_test;
 mod logging;
-use logging::FileLogger;
+use logging::{ OnRequestLogger, OnResponseLogger, FileLogger };
 use serde_json::json;
 use router::get_main_router;
 use tracing_subscriber::{filter, prelude::*};
+
+
 
 fn get_connection_pool(env_config: EnvConfig) -> Pool<ConnectionManager<PgConnection>> {
     let manager = ConnectionManager::<PgConnection>::new(env_config.DATABASE_URL);
@@ -38,6 +40,8 @@ async fn main() {
 
     let stdout_log = tracing_subscriber::fmt::layer()
         .with_writer(stdout)
+        .with_target(false)
+        .with_line_number(false)
         .pretty();
 
     let mut access_log_fd = FileLogger::new(String::from("access.log"));
@@ -57,12 +61,14 @@ async fn main() {
 
     let access_log = tracing_subscriber::fmt::layer()
         .with_writer(Arc::new(al_file))
+        .with_line_number(false)
         .with_target(false)
         .json();
 
 
     let error_log = tracing_subscriber::fmt::layer()
         .with_writer(Arc::new(el_file))
+        .with_line_number(false)
         .with_target(false)
         .json();
 
@@ -100,8 +106,8 @@ async fn main() {
         }
     });
 
-    let trace_layer = TraceLayer::new_for_http()
-        .on_request(DefaultOnRequest::new().level(Level::INFO))
+    let trace_layer: TraceLayer<tower_http::classify::SharedClassifier<tower_http::classify::ServerErrorsAsFailures>, DefaultMakeSpan, OnRequestLogger, OnResponseLogger> = TraceLayer::new_for_http()
+        .on_request(OnRequestLogger::new())
         .on_response(OnResponseLogger::new())
         .on_failure(DefaultOnFailure::new().level(Level::ERROR));
 
@@ -112,7 +118,7 @@ async fn main() {
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     tracing::debug!("listening on {}", addr);
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await.unwrap();
 }
 
 pub async fn error_handler(err: BoxError) -> impl IntoResponse {
@@ -120,24 +126,5 @@ pub async fn error_handler(err: BoxError) -> impl IntoResponse {
         data: None,
         message: Some(err.to_string()),
         status: StatusCode::INTERNAL_SERVER_ERROR
-    }
- }
-
-
- #[derive(Clone)]
- pub struct OnResponseLogger {
-
- }
-
-impl OnResponseLogger {
-    fn new() -> Self {
-        return OnResponseLogger {  }
-    }
-}
-
- impl<B> OnResponse<B> for OnResponseLogger {
-    fn on_response(self, response: &axum::http::Response<B>, latency: time::Duration, span: &tracing::Span) {
-        let value = json!({"status": response.status().as_str(), "latency": latency });
-        info!("{}", value)
     }
  }
