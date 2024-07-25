@@ -1,33 +1,39 @@
+use axum::Router;
+use axum::{
+    http::{HeaderValue, Method, StatusCode},
+    response::IntoResponse,
+    BoxError,
+};
+use config::{AppState, EnvConfig};
 use core::time;
-use std::{fs::File, io::{self, stdout}, os::{self, unix::process}, process::exit, sync::Arc};
-use axum::{extract::{connect_info::MockConnectInfo, ConnectInfo}, http::{request, HeaderValue, Method, StatusCode}, response::IntoResponse, BoxError, ServiceExt};
-use config::{EnvConfig, AppState};
 use diesel::r2d2::{ConnectionManager, Pool};
 use helper::errors::HTTPResponse;
-use tower_http::{cors::{AllowHeaders, AllowOrigin, Any, CorsLayer}, trace::{DefaultMakeSpan, DefaultOnFailure, DefaultOnRequest, DefaultOnResponse, OnResponse, TraceLayer}};
-use tracing_subscriber::layer::SubscriberExt;
 use std::net::SocketAddr;
-use axum::Router;
-use tracing::{self, info, instrument::WithSubscriber, Level};
+use std::{io::stdout, sync::Arc};
+use tower_http::{
+    cors::{AllowHeaders, AllowOrigin, Any, CorsLayer},
+    trace::{DefaultMakeSpan, DefaultOnFailure, TraceLayer},
+};
+use tracing::level_filters::LevelFilter;
+use tracing::{self, Level};
+use tracing_appender::rolling::Rotation;
+use tracing_subscriber::layer::SubscriberExt;
 mod models;
 mod schema;
 use diesel::prelude::*;
 mod config;
-mod handler;
-mod validation;
-mod repositories;
-mod middlewares;
-mod helper;
 mod domain;
-mod router;
-mod models_test;
+mod handler;
+mod helper;
 mod logging;
-use logging::{ OnRequestLogger, OnResponseLogger, FileLogger };
-use serde_json::json;
+mod middlewares;
+mod models_test;
+mod repositories;
+mod router;
+mod validation;
+use logging::{initialize_logger, OnRequestLogger, OnResponseLogger};
 use router::get_main_router;
-use tracing_subscriber::{filter, prelude::*};
-
-
+use tracing_appender;
 
 fn get_connection_pool(env_config: EnvConfig) -> Pool<ConnectionManager<PgConnection>> {
     let manager = ConnectionManager::<PgConnection>::new(env_config.DATABASE_URL);
@@ -37,62 +43,20 @@ fn get_connection_pool(env_config: EnvConfig) -> Pool<ConnectionManager<PgConnec
 
 #[tokio::main]
 async fn main() {
-
-    let stdout_log = tracing_subscriber::fmt::layer()
-        .with_writer(stdout)
-        .with_target(false)
-        .with_line_number(false)
-        .pretty();
-
-    let mut access_log_fd = FileLogger::new(String::from("access.log"));
-    access_log_fd.open();
-    let al_file = match access_log_fd.file {
-        None => {exit(1)},
-        Some(f) => f
-    };
-
-
-    let mut error_log_fd = FileLogger::new(String::from("error.log"));
-    error_log_fd.open();
-    let el_file = match error_log_fd.file {
-        None => exit(1),
-        Some(f) => f
-    };
-
-    let access_log = tracing_subscriber::fmt::layer()
-        .with_writer(Arc::new(al_file))
-        .with_line_number(false)
-        .with_target(false)
-        .json();
-
-
-    let error_log = tracing_subscriber::fmt::layer()
-        .with_writer(Arc::new(el_file))
-        .with_line_number(false)
-        .with_target(false)
-        .json();
-
-
-    tracing_subscriber::registry()
-        .with(stdout_log)
-        .with(access_log.with_filter(filter::LevelFilter::INFO))
-        .with(error_log.with_filter(filter::LevelFilter::ERROR))
-        .init();
-
-
     let config = config::ConfigManager::new();
 
     let origin: AllowOrigin = match &config.env.CORS_ORIGIN {
         None => Any.into(),
-        Some(r) => r.parse::<HeaderValue>().expect("Invalid cors url").into()
-    }; 
+        Some(r) => r.parse::<HeaderValue>().expect("Invalid cors url").into(),
+    };
 
     let cors = CorsLayer::new()
-    .allow_methods([Method::GET, Method::POST, Method::OPTIONS, Method::PATCH])
-    .allow_headers(AllowHeaders::any())
-    .allow_origin(origin);
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS, Method::PATCH])
+        .allow_headers(AllowHeaders::any())
+        .allow_origin(origin);
 
-    
+    let (_access_guard, _error_guard) = initialize_logger();
+
     let pool = get_connection_pool(config.env.clone());
     let app_state = Arc::new(AppState::new(pool, config.clone()));
 
@@ -106,25 +70,36 @@ async fn main() {
         }
     });
 
-    let trace_layer: TraceLayer<tower_http::classify::SharedClassifier<tower_http::classify::ServerErrorsAsFailures>, DefaultMakeSpan, OnRequestLogger, OnResponseLogger> = TraceLayer::new_for_http()
+    // This is needed. If the guards are _, the variables are deallocated and the logging does not work anymore
+
+    let trace_layer: TraceLayer<
+        tower_http::classify::SharedClassifier<tower_http::classify::ServerErrorsAsFailures>,
+        DefaultMakeSpan,
+        OnRequestLogger,
+        OnResponseLogger,
+    > = TraceLayer::new_for_http()
         .on_request(OnRequestLogger::new())
         .on_response(OnResponseLogger::new())
         .on_failure(DefaultOnFailure::new().level(Level::ERROR));
 
     let main_router = get_main_router(&app_state, config, cors);
-    let app = Router::new().nest("/api", main_router)
-        .layer(trace_layer);
-    
+    let app = Router::new().nest("/api", main_router).layer(trace_layer);
+
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     tracing::debug!("listening on {}", addr);
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await.unwrap();
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .unwrap();
 }
 
 pub async fn error_handler(err: BoxError) -> impl IntoResponse {
     return HTTPResponse::<()> {
         data: None,
         message: Some(err.to_string()),
-        status: StatusCode::INTERNAL_SERVER_ERROR
-    }
- }
+        status: StatusCode::INTERNAL_SERVER_ERROR,
+    };
+}
