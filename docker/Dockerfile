@@ -13,7 +13,7 @@ RUN apt clean && apt update && apt install -y pkg-config libssl-dev gcc-multilib
 RUN cargo build --release
 
 # Copy the source code
-COPY ./src ./src
+COPY ./internal ./internal
 
 # Build for release.
 RUN rm ./target/release/deps/sanctumchat_service*
@@ -30,4 +30,4 @@ USER appuser
 
 COPY --from=build --chown=appuser:appuser /sanctumchat-service/target/release/sanctumchat-service /usr/src/sanctumchat-service
 
-CMD ["/usr/src/sanctumchat-service"]
+CMD ["/usr/internal/sanctumchat-service"]

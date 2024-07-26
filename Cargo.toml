@@ -7,7 +7,7 @@ edition = "2021"
 
 [[bin]]
 name = "sanctumchat-service"
-path = "src/main.rs"
+path = "internal/main.rs"
 
 [dependencies]
 axum = { version = "0.7.2", features = ["ws"]}
