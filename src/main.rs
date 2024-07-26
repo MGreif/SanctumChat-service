@@ -6,10 +6,12 @@ use axum::{
 };
 use config::{AppState, EnvConfig};
 use core::time;
+use diesel::dsl::broadcast;
 use diesel::r2d2::{ConnectionManager, Pool};
 use helper::errors::HTTPResponse;
 use std::net::SocketAddr;
 use std::{io::stdout, sync::Arc};
+use tokio::sync::broadcast::Sender;
 use tower_http::{
     cors::{AllowHeaders, AllowOrigin, Any, CorsLayer},
     trace::{DefaultMakeSpan, DefaultOnFailure, TraceLayer},
@@ -55,6 +57,7 @@ async fn main() {
         .allow_headers(AllowHeaders::any())
         .allow_origin(origin);
 
+    // This is needed. If the guards are _, the variables are deallocated and the logging does not work anymore
     let (_access_guard, _error_guard) = initialize_logger();
 
     let pool = get_connection_pool(config.env.clone());
@@ -66,11 +69,11 @@ async fn main() {
         let mut interval = tokio::time::interval(time::Duration::from_secs(15));
         loop {
             interval.tick().await;
-            app_state_clone.remove_expired_p2p_sessions().await;
+            app_state_clone
+                .remove_expired_current_user_connections_sessions()
+                .await;
         }
     });
-
-    // This is needed. If the guards are _, the variables are deallocated and the logging does not work anymore
 
     let trace_layer: TraceLayer<
         tower_http::classify::SharedClassifier<tower_http::classify::ServerErrorsAsFailures>,
@@ -79,8 +82,7 @@ async fn main() {
         OnResponseLogger,
     > = TraceLayer::new_for_http()
         .on_request(OnRequestLogger::new())
-        .on_response(OnResponseLogger::new())
-        .on_failure(DefaultOnFailure::new().level(Level::ERROR));
+        .on_response(OnResponseLogger::new());
 
     let main_router = get_main_router(&app_state, config, cors);
     let app = Router::new().nest("/api", main_router).layer(trace_layer);
@@ -94,12 +96,4 @@ async fn main() {
     )
     .await
     .unwrap();
-}
-
-pub async fn error_handler(err: BoxError) -> impl IntoResponse {
-    return HTTPResponse::<()> {
-        data: None,
-        message: Some(err.to_string()),
-        status: StatusCode::INTERNAL_SERVER_ERROR,
-    };
 }

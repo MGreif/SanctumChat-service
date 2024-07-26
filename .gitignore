@@ -5,3 +5,4 @@ tmp
 access.log
 error.log
 /logs
+/tests/websocket/__pycache__

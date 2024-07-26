@@ -1,14 +1,16 @@
 use std::{
     env, io,
-    time::{self, SystemTime},
+    time::{self, Duration, SystemTime},
 };
 
-use axum::body::Body;
+use crate::helper::errors::HTTPResponse;
+use axum::{body::Body, Error};
 use cookie::time::{format_description::well_known::Rfc3339, OffsetDateTime};
+use openssl::error;
 use serde::Serialize;
 use serde_json::json;
-use tower_http::trace::{OnRequest, OnResponse};
-use tracing::{level_filters::LevelFilter, Level};
+use tower_http::trace::{OnFailure, OnRequest, OnResponse};
+use tracing::{level_filters::LevelFilter, Level, Span};
 use tracing_appender::{non_blocking::WorkerGuard, rolling::Rotation};
 use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
@@ -42,6 +44,15 @@ impl OnResponse<Body> for OnResponseLogger {
 pub struct OnRequestLogger {}
 
 impl OnRequestLogger {
+    pub fn new() -> Self {
+        return Self {};
+    }
+}
+
+#[derive(Clone)]
+pub struct OnErrorLogger {}
+
+impl OnErrorLogger {
     pub fn new() -> Self {
         return Self {};
     }
