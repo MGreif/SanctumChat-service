@@ -1,9 +1,11 @@
 use crate::{
     config::AppState,
-    domain::{friend_domain::FriendDomain, message_domain::MessageDomain},
+    entities::{
+        friends::{repository::FriendRepository, service::FriendDomain},
+        messages::{messages::MessageDomain, repository::MessageRepository},
+    },
     handler::ws_handler::SocketMessage,
     helper::jwt::Token,
-    repositories::{friend_repository::FriendRepository, message_repository::MessageRepository},
 };
 use async_trait::async_trait;
 use diesel::prelude::*;

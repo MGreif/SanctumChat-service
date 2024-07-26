@@ -1,12 +1,12 @@
 use crate::config::AppState;
-use crate::domain::friend_domain::FriendDomain;
-use crate::domain::friend_request_domain::FriendRequestDomain;
+use crate::entities::friend_requests::friend_requests::FriendRequestDomain;
+use crate::entities::friend_requests::repository::FriendRequestRepository;
+use crate::entities::friends::repository::{FriendDTO, FriendRepository};
+use crate::entities::friends::service::FriendDomain;
 use crate::handler::ws_handler::{SocketMessage, SocketMessageFriendRequest};
 use crate::helper::errors::HTTPResponse;
 use crate::helper::jwt::Token;
-use crate::models::{FriendRequest, UserDTOSanitized};
-use crate::repositories::friend_repository::{FriendDTO, FriendRepository};
-use crate::repositories::friend_request_repository::FriendRequestRepository;
+use crate::models::FriendRequest;
 use crate::validation::string_validate::UuidValidator;
 use axum::extract::Path;
 use axum::http::StatusCode;
@@ -170,7 +170,9 @@ pub async fn get_active_friends(
     State(app_state): State<Arc<AppState>>,
     token: Extension<Token>,
 ) -> impl IntoResponse {
-    let result = app_state.get_friends_in_current_user_connections(&token.sub).await;
+    let result = app_state
+        .get_friends_in_current_user_connections(&token.sub)
+        .await;
     let result = result
         .iter()
         .map(|u| u.0.to_owned())

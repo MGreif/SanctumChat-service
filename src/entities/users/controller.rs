@@ -1,14 +1,12 @@
 use crate::helper::errors::HTTPResponse;
 use crate::{config::AppState, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR};
 use crate::{
-    domain::user_domain::UserDomain,
     helper::{
         jwt::{hash_string, Token},
         keys::{generate_rsa_key_pair, validate_public_key},
         session::SessionManager,
     },
     models::UserDTO,
-    repositories::user_repository::UserRepository,
 };
 use axum::{
     extract::{Json, State},
@@ -22,6 +20,9 @@ use axum::{
 use base64;
 use base64::Engine;
 use std::sync::Arc;
+
+use super::repository::UserRepository;
+use super::users::UserDomain;
 
 #[derive(serde::Deserialize)]
 pub struct UserCreateDTO {
@@ -250,7 +251,9 @@ pub async fn login<'a>(
 
     let session_manager = SessionManager::new(user.clone(), token, state.clone());
     session_manager.notify_online().await;
-    state.insert_into_current_user_connections(session_manager).await;
+    state
+        .insert_into_current_user_connections(session_manager)
+        .await;
 
     headers.insert(
         SET_COOKIE,
@@ -296,7 +299,9 @@ pub async fn token<'a>(
     };
 
     let session_manager = SessionManager::new(user.clone(), token, app_state.clone());
-    app_state.insert_into_current_user_connections(session_manager).await;
+    app_state
+        .insert_into_current_user_connections(session_manager)
+        .await;
 
     HTTPResponse::<String> {
         data: Some(token_str),

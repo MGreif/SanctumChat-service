@@ -7,7 +7,6 @@ use crate::{
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tracing::error;
-use tracing::info;
 
 #[derive(Debug, Clone)]
 pub struct SessionManager {

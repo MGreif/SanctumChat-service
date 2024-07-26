@@ -1,41 +1,28 @@
+use axum::http::{HeaderValue, Method};
 use axum::Router;
-use axum::{
-    http::{HeaderValue, Method, StatusCode},
-    response::IntoResponse,
-    BoxError,
-};
 use config::{AppState, EnvConfig};
 use core::time;
-use diesel::dsl::broadcast;
 use diesel::r2d2::{ConnectionManager, Pool};
-use helper::errors::HTTPResponse;
 use std::net::SocketAddr;
-use std::{io::stdout, sync::Arc};
-use tokio::sync::broadcast::Sender;
+use std::sync::Arc;
 use tower_http::{
     cors::{AllowHeaders, AllowOrigin, Any, CorsLayer},
-    trace::{DefaultMakeSpan, DefaultOnFailure, TraceLayer},
+    trace::{DefaultMakeSpan, TraceLayer},
 };
-use tracing::level_filters::LevelFilter;
-use tracing::{self, Level};
-use tracing_appender::rolling::Rotation;
-use tracing_subscriber::layer::SubscriberExt;
 mod models;
 mod schema;
 use diesel::prelude::*;
 mod config;
-mod domain;
+mod entities;
 mod handler;
 mod helper;
 mod logging;
 mod middlewares;
 mod models_test;
-mod repositories;
 mod router;
 mod validation;
 use logging::{initialize_logger, OnRequestLogger, OnResponseLogger};
 use router::get_main_router;
-use tracing_appender;
 
 fn get_connection_pool(env_config: EnvConfig) -> Pool<ConnectionManager<PgConnection>> {
     let manager = ConnectionManager::<PgConnection>::new(env_config.DATABASE_URL);

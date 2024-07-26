@@ -9,7 +9,8 @@ use tower_http::cors::CorsLayer;
 
 use crate::{
     config::{AppState, ConfigManager},
-    handler::{friend_handler, message_handler, user_handler, version_handler, ws_handler},
+    entities::{friends, messages, users},
+    handler::{version_handler, ws_handler},
     middlewares,
 };
 
@@ -19,31 +20,38 @@ pub fn get_main_router(
     cors: CorsLayer,
 ) -> Router {
     let main = Router::new()
-        .route("/messages/read", patch(message_handler::set_messages_read))
-        .route("/messages", get(message_handler::get_messages))
-        .route("/friends/active", get(friend_handler::get_active_friends))
-        .route("/friends", get(friend_handler::get_friends))
+        .route(
+            "/messages/read",
+            patch(messages::controller::set_messages_read),
+        )
+        .route("/messages", get(messages::controller::get_messages))
+        .route(
+            "/friends/active",
+            get(friends::controller::get_active_friends),
+        )
+        .route("/friends", get(friends::controller::get_friends))
         .route(
             "/friend-requests",
-            get(friend_handler::get_friend_requests).post(friend_handler::create_friend_request),
+            get(friends::controller::get_friend_requests)
+                .post(friends::controller::create_friend_request),
         )
         .route(
             "/friend-requests/:uuid",
-            patch(friend_handler::patch_friend_request),
+            patch(friends::controller::patch_friend_request),
         )
-        .route("/token", post(user_handler::token))
+        .route("/token", post(users::controller::token))
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             middlewares::auth::bearer_token_validation,
         ))
-        .route("/logout", post(user_handler::logout))
+        .route("/logout", post(users::controller::logout))
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             middlewares::token::token_mw,
         ))
-        .route("/users", post(user_handler::create_user))
+        .route("/users", post(users::controller::create_user))
         .route("/ws", get(ws_handler::ws_handler))
-        .route("/login", post(user_handler::login))
+        .route("/login", post(users::controller::login))
         .route("/version", get(version_handler::version_handler))
         .route_layer(middleware::from_fn(middlewares::cookies::cookie_mw))
         .layer(cors)
