@@ -3,10 +3,8 @@ use std::{
     time::{self, Duration, SystemTime},
 };
 
-use crate::helper::errors::HTTPResponse;
 use axum::{body::Body, Error};
 use cookie::time::{format_description::well_known::Rfc3339, OffsetDateTime};
-use openssl::error;
 use serde::Serialize;
 use serde_json::json;
 use tower_http::trace::{OnFailure, OnRequest, OnResponse};
