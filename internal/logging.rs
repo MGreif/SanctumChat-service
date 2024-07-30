@@ -3,7 +3,7 @@ use std::{
     time::{self, Duration, SystemTime},
 };
 
-use axum::{body::Body, Error};
+use axum::body::Body;
 use cookie::time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use serde::Serialize;
 use serde_json::json;
