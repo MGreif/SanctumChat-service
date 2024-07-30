@@ -1,4 +1,8 @@
-use crate::{config::AppState, helper::jwt::validate_user_token};
+use crate::{
+    appstate::AppState,
+    appstate::IAppState,
+    helper::{jwt::validate_user_token, session::ISessionManager},
+};
 use axum::{
     body::Body,
     extract::State,
@@ -8,8 +12,8 @@ use axum::{
 };
 use std::sync::Arc;
 
-pub async fn bearer_token_validation<'a>(
-    State(app_state): State<Arc<AppState>>,
+pub async fn bearer_token_validation<'a, S: ISessionManager>(
+    State(app_state): State<Arc<AppState<S>>>,
     headers: HeaderMap,
     request: Request<Body>,
     next: Next,
@@ -23,7 +27,10 @@ pub async fn bearer_token_validation<'a>(
         }
     };
 
-    match validate_user_token(auth_header, app_state.config.env.HASHING_KEY.as_bytes()) {
+    match validate_user_token(
+        auth_header,
+        app_state.get_config().env.HASHING_KEY.as_bytes(),
+    ) {
         Err(_) => return Err(StatusCode::UNAUTHORIZED),
         Ok(_) => {}
     };

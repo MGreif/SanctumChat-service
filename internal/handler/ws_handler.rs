@@ -2,9 +2,13 @@ use std::sync::Arc;
 
 use super::socket_handler::ws_handle_direct::SocketMessageDirect;
 use crate::{
-    config::AppState,
+    appstate::AppState,
+    appstate::IAppState,
     handler::socket_handler::ws_receive_handler::{ws_receive_handler, SocketMessageError},
-    helper::jwt::{token_into_typed, validate_user_token},
+    helper::{
+        jwt::{token_into_typed, validate_user_token},
+        session::ISessionManager,
+    },
 };
 use axum::{
     extract::{
@@ -13,8 +17,9 @@ use axum::{
     },
     response::Response,
 };
-use futures::{lock::Mutex, sink::SinkExt, stream::StreamExt};
+use futures::{sink::SinkExt, stream::StreamExt};
 use serde_json::{from_str, to_string};
+use tokio::sync::Mutex;
 use tracing::info;
 use uuid::Uuid;
 
@@ -23,12 +28,12 @@ pub struct WsQuery {
     token: String,
 }
 
-pub async fn ws_handler<'a>(
+pub async fn ws_handler<S: ISessionManager>(
     ws: WebSocketUpgrade,
-    State(app_state): State<Arc<AppState>>,
+    State(app_state): State<Arc<AppState<S>>>,
     Query(query): Query<WsQuery>,
 ) -> Response {
-    ws.on_upgrade(|socket| handle_socket(socket, app_state, query))
+    ws.on_upgrade(move |socket| handle_socket(socket, app_state.to_owned(), query))
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
@@ -132,14 +137,18 @@ pub enum SocketMessage {
     SocketMessageFriendRequest(SocketMessageFriendRequest),
 }
 
-async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: WsQuery) {
+async fn handle_socket<S: ISessionManager>(
+    stream: WebSocket,
+    app_state: Arc<AppState<S>>,
+    query: WsQuery,
+) {
     let (sender, mut receiver) = stream.split();
     let sender = Arc::new(Mutex::new(sender));
 
     let app_state_orig = app_state.clone();
     let is_validated_result = validate_user_token(
         query.token.clone(),
-        &app_state_orig.config.env.HASHING_KEY.as_bytes(),
+        &app_state_orig.get_config().env.HASHING_KEY.as_bytes(),
     );
     match is_validated_result {
         Err(_) => {
@@ -162,20 +171,23 @@ async fn handle_socket<'a>(stream: WebSocket, app_state: Arc<AppState>, query: W
 
     let token = token_into_typed(
         &query.token,
-        app_state_orig.config.env.HASHING_KEY.as_bytes(),
+        app_state_orig.get_config().env.HASHING_KEY.as_bytes(),
     )
     .unwrap();
     let token2 = token.clone();
 
-    let current_user_connections_connection = app_state_orig.current_user_connections.lock().await;
+    let current_user_connections_connection =
+        app_state_orig.get_current_user_connections().lock().await;
     let client_session = current_user_connections_connection.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await;
 
-    let mut client_session_receiver = client_session.user_socket.subscribe();
+    let mut client_session_receiver = client_session.get_user_socket().subscribe();
     drop(client_session);
     drop(current_user_connections_connection);
 
     // get online friends at client start/initialization
-    let friends = app_state_orig.get_friends_in_current_user_connections(&token.sub).await;
+    let friends = app_state_orig
+        .get_friends_in_current_user_connections(&token.sub)
+        .await;
 
     let mut online_friends: Vec<String> = vec![];
 

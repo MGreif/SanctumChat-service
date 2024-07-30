@@ -1,4 +1,4 @@
-use crate::config::AppState;
+use crate::appstate::{AppState, IAppState};
 use crate::entities::friend_requests::friend_requests::FriendRequestDomain;
 use crate::entities::friend_requests::repository::FriendRequestRepository;
 use crate::entities::friends::repository::{FriendDTO, FriendRepository};
@@ -6,6 +6,7 @@ use crate::entities::friends::service::FriendDomain;
 use crate::handler::ws_handler::{SocketMessage, SocketMessageFriendRequest};
 use crate::helper::errors::HTTPResponse;
 use crate::helper::jwt::Token;
+use crate::helper::session::ISessionManager;
 use crate::models::FriendRequest;
 use crate::validation::string_validate::UuidValidator;
 use axum::extract::Path;
@@ -31,12 +32,12 @@ pub struct FriendRequestGETResponseDTO {
     #[diesel(sql_type = Nullable<Bool>)]
     pub accepted: Option<bool>,
 }
-pub async fn get_friend_requests(
-    State(app_state): State<Arc<AppState>>,
+pub async fn get_friend_requests<S: ISessionManager>(
+    State(app_state): State<Arc<AppState<S>>>,
     token: Extension<Token>,
 ) -> impl IntoResponse {
     let friend_request_repository = FriendRequestRepository {
-        pg_pool: app_state.db_pool.get().expect("Could not get db_pool"),
+        pg_pool: app_state.get_db_pool(),
     };
     let mut friend_request_domain = FriendRequestDomain::new(friend_request_repository);
 
@@ -54,13 +55,13 @@ pub async fn get_friend_requests(
     .into_response();
 }
 
-pub async fn create_friend_request(
-    State(app_state): State<Arc<AppState>>,
+pub async fn create_friend_request<S: ISessionManager>(
+    State(app_state): State<Arc<AppState<S>>>,
     token: Extension<Token>,
     Json(body): Json<FriendRequestPOSTRequestDTO>,
 ) -> impl IntoResponse {
     let friend_request_repository = FriendRequestRepository {
-        pg_pool: app_state.db_pool.get().expect("Could not get db_pool"),
+        pg_pool: app_state.get_db_pool(),
     };
     let mut friend_request_domain = FriendRequestDomain::new(friend_request_repository);
 
@@ -71,7 +72,7 @@ pub async fn create_friend_request(
         Err(err) => return err.into_response(),
     };
 
-    let receiver_session_manager = app_state.current_user_connections.lock().await;
+    let receiver_session_manager = app_state.get_current_user_connections().lock().await;
     let receiver_session_manager = receiver_session_manager.get(&recipient.clone());
     if let Some(sm) = receiver_session_manager {
         let sm = sm.lock().await;
@@ -96,14 +97,14 @@ pub struct FriendRequestPatchDTOBody {
     accepted: bool,
 }
 
-pub async fn patch_friend_request(
-    State(app_state): State<Arc<AppState>>,
+pub async fn patch_friend_request<S: ISessionManager, T: IAppState<S>>(
+    State(app_state): State<Arc<T>>,
     token: Extension<Token>,
     Path(uuid): Path<String>,
     Json(body): Json<FriendRequestPatchDTOBody>,
 ) -> impl IntoResponse {
     let friend_request_repository = FriendRequestRepository {
-        pg_pool: app_state.db_pool.get().expect("Could not get db_pool"),
+        pg_pool: app_state.get_db_pool(),
     };
     let mut friend_request_domain = FriendRequestDomain::new(friend_request_repository);
 
@@ -145,12 +146,12 @@ pub async fn patch_friend_request(
     }
 }
 
-pub async fn get_friends(
-    State(app_state): State<Arc<AppState>>,
+pub async fn get_friends<S: ISessionManager, T: IAppState<S>>(
+    State(app_state): State<Arc<T>>,
     token: Extension<Token>,
 ) -> impl IntoResponse {
     let friend_repository = FriendRepository {
-        pg_pool: app_state.db_pool.get().expect("Could not get db_pool"),
+        pg_pool: app_state.get_db_pool(),
     };
     let mut friendDomain = FriendDomain::new(friend_repository);
     let result = match friendDomain.get_friends(&token.sub) {
@@ -166,8 +167,8 @@ pub async fn get_friends(
     .into_response();
 }
 
-pub async fn get_active_friends(
-    State(app_state): State<Arc<AppState>>,
+pub async fn get_active_friends<S: ISessionManager, T: IAppState<S>>(
+    State(app_state): State<Arc<T>>,
     token: Extension<Token>,
 ) -> impl IntoResponse {
     let result = app_state
@@ -181,5 +182,6 @@ pub async fn get_active_friends(
         status: StatusCode::OK,
         data: Some(result),
         message: None,
-    };
+    }
+    .into_response();
 }

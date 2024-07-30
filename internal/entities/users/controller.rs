@@ -1,5 +1,7 @@
+use crate::appstate::{AppState, IAppState};
 use crate::helper::errors::HTTPResponse;
-use crate::{config::AppState, validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR};
+use crate::helper::session::ISessionManager;
+use crate::validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR;
 use crate::{
     helper::{
         jwt::{hash_string, Token},
@@ -37,12 +39,12 @@ pub struct GetUserQueryDTO {
     pub name: Option<String>,
 }
 
-pub async fn create_user<'a>(
-    State(state): State<Arc<AppState>>,
+pub async fn create_user<'a, S: ISessionManager>(
+    State(state): State<Arc<AppState<S>>>,
     Json(body): Json<UserCreateDTO>,
 ) -> impl IntoResponse {
     let user_repository = UserRepository {
-        pg_pool: state.db_pool.get().expect("Could not get db_pool"),
+        pg_pool: state.get_db_pool(),
     };
     let mut user_domain = UserDomain::new(user_repository);
 
@@ -146,7 +148,7 @@ pub async fn create_user<'a>(
         public_key: pub_key,
     };
 
-    let result = user_domain.create_user(&new_user, &state.config.env.HASHING_KEY.as_bytes());
+    let result = user_domain.create_user(&new_user, &state.get_config().env.HASHING_KEY.as_bytes());
 
     match result {
         Ok(_) => (
@@ -167,8 +169,8 @@ pub struct LoginDTO {
     pub password: String,
 }
 
-pub async fn logout<'a>(
-    State(state): State<Arc<AppState>>,
+pub async fn logout<S: ISessionManager>(
+    State(state): State<Arc<AppState<S>>>,
     token: Extension<Token>,
 ) -> impl IntoResponse {
     let session_manager = match state.remove_from_current_user_connections(&token.sub).await {
@@ -182,7 +184,11 @@ pub async fn logout<'a>(
         }
     };
 
-    session_manager.lock().await.notify_offline().await;
+    session_manager
+        .lock()
+        .await
+        .notify_offline(&state as &AppState<S>)
+        .await;
 
     HTTPResponse::<()> {
         message: Some(String::from("Successfully logged out")),
@@ -191,8 +197,8 @@ pub async fn logout<'a>(
     }
 }
 
-pub async fn login<'a>(
-    State(state): State<Arc<AppState>>,
+pub async fn login<S: ISessionManager>(
+    State(state): State<Arc<AppState<S>>>,
     Json(body): Json<LoginDTO>,
 ) -> impl IntoResponse {
     let LoginDTO {
@@ -200,7 +206,7 @@ pub async fn login<'a>(
         username: username_id,
     } = body;
     let user_repository = UserRepository {
-        pg_pool: state.db_pool.get().expect("Could not get db_pool"),
+        pg_pool: state.get_db_pool(),
     };
     let mut user_domain = UserDomain::new(user_repository);
 
@@ -237,11 +243,11 @@ pub async fn login<'a>(
         Ok(_) => {}
     }
 
-    let pw = hash_string(&pw, state.config.env.HASHING_KEY.as_bytes());
+    let pw = hash_string(&pw, state.get_config().env.HASHING_KEY.as_bytes());
     let token = user_domain.login_user_and_prepare_token(
         &username_id,
         &pw,
-        state.config.env.HASHING_KEY.as_bytes(),
+        state.get_config().env.HASHING_KEY.as_bytes(),
     );
 
     let (user, token, session_token) = match token {
@@ -249,8 +255,10 @@ pub async fn login<'a>(
         Err(err) => return (headers, err.into_response()),
     };
 
-    let session_manager = SessionManager::new(user.clone(), token, state.clone());
-    session_manager.notify_online().await;
+    let session_manager = S::new(user.clone(), token);
+    session_manager
+        .notify_online(&state.clone() as &AppState<S>)
+        .await;
     state
         .insert_into_current_user_connections(session_manager)
         .await;
@@ -276,15 +284,18 @@ pub async fn login<'a>(
     )
 }
 
-pub async fn token<'a>(
-    State(app_state): State<Arc<AppState>>,
+pub async fn token<'a, S: ISessionManager, T: IAppState<S>>(
+    State(app_state): State<Arc<T>>,
     Extension(token): Extension<Token>,
 ) -> impl IntoResponse {
-    let pool = app_state.db_pool.get().expect("Could not get db pool");
+    let pool = app_state.get_db_pool();
     let repository = UserRepository { pg_pool: pool };
     let mut domain = UserDomain::new(repository);
 
-    let result = domain.renew_token(&token.sub, app_state.config.env.HASHING_KEY.as_bytes());
+    let result = domain.renew_token(
+        &token.sub,
+        app_state.get_config().env.HASHING_KEY.as_bytes(),
+    );
 
     let (user, token, token_str) = match result {
         Ok(result) => result,
@@ -298,7 +309,7 @@ pub async fn token<'a>(
         }
     };
 
-    let session_manager = SessionManager::new(user.clone(), token, app_state.clone());
+    let session_manager = S::new(user.clone(), token);
     app_state
         .insert_into_current_user_connections(session_manager)
         .await;

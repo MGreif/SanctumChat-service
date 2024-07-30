@@ -12,15 +12,17 @@ use tower_http::{
 };
 
 use crate::{
-    config::{AppState, ConfigManager},
+    appstate::AppState,
+    config::ConfigManager,
     entities::{friends, messages, users},
     handler::{version_handler, ws_handler},
+    helper::session::{ISessionManager, SessionManager},
     interfaces::http::middlewares,
     logging::{OnRequestLogger, OnResponseLogger},
 };
 
-pub fn get_main_router(
-    app_state: &Arc<AppState>,
+pub fn get_main_router<S: ISessionManager>(
+    app_state: &Arc<AppState<S>>,
     config: ConfigManager,
     cors: CorsLayer,
 ) -> Router {
@@ -65,7 +67,10 @@ pub fn get_main_router(
     return main;
 }
 
-pub fn initialize_http_server(app_state: &Arc<AppState>, config: ConfigManager) -> Router {
+pub fn initialize_http_server<S: ISessionManager>(
+    app_state: &Arc<AppState<S>>,
+    config: ConfigManager,
+) -> Router {
     let origin: AllowOrigin = match &config.env.CORS_ORIGIN {
         None => tower_http::cors::Any.into(),
         Some(r) => r.parse::<HeaderValue>().expect("Invalid cors url").into(),

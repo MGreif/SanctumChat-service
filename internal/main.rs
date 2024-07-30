@@ -1,5 +1,7 @@
-use config::{AppState, EnvConfig};
+use appstate::AppState;
+use config::EnvConfig;
 use diesel::r2d2::{ConnectionManager, Pool};
+use helper::session::SessionManager;
 use interfaces::http::router::initialize_http_server;
 use scheduler::session_cleanup::initialize_session_cleanup_schedule;
 use std::net::SocketAddr;
@@ -17,6 +19,7 @@ mod models_test;
 mod scheduler;
 mod validation;
 use logging::initialize_logger;
+mod appstate;
 
 fn get_connection_pool(env_config: EnvConfig) -> Pool<ConnectionManager<PgConnection>> {
     let manager = ConnectionManager::<PgConnection>::new(env_config.DATABASE_URL);
@@ -32,7 +35,7 @@ async fn main() {
     let (_access_guard, _error_guard) = initialize_logger();
 
     let pool = get_connection_pool(config.env.clone());
-    let app_state = Arc::new(AppState::new(pool, config.clone()));
+    let app_state = Arc::new(AppState::<SessionManager>::new(pool, config.clone()));
 
     initialize_session_cleanup_schedule(app_state.clone());
 
@@ -48,3 +51,5 @@ async fn main() {
     .await
     .unwrap();
 }
+
+mod appstate_test;

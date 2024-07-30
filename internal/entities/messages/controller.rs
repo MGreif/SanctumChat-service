@@ -1,19 +1,17 @@
 use std::str::FromStr;
 use std::sync::Arc;
 
-use crate::config::AppState;
+use crate::appstate::{AppState, IAppState};
 use crate::helper::errors::HTTPResponse;
 use crate::helper::jwt::Token;
 use crate::helper::pagination::Pagination;
+use crate::helper::session::ISessionManager;
 use crate::models::Message;
 use axum::extract::Query;
 use axum::http::StatusCode;
 use axum::{extract::State, response::IntoResponse};
 use axum::{Extension, Json};
-use diesel::sql_types::Uuid;
-use openssl::pkey::Params;
 use serde::{Deserialize, Serialize};
-use tracing::info;
 
 use super::messages::MessageDomain;
 use super::repository::MessageRepository;
@@ -25,16 +23,13 @@ pub struct GetMessageDTO {
     pub index: Option<u8>,
 }
 
-pub async fn get_messages(
-    State(app_state): State<Arc<AppState>>,
+pub async fn get_messages<S: ISessionManager>(
+    State(app_state): State<Arc<AppState<S>>>,
     Query(query): Query<GetMessageDTO>,
     token: Extension<Token>,
 ) -> impl IntoResponse {
     let repo = MessageRepository {
-        pg_pool: app_state
-            .db_pool
-            .get()
-            .expect("[get_messages] Could not get db pool"),
+        pg_pool: app_state.get_db_pool(),
     };
     let mut domain = MessageDomain::new(repo);
 
@@ -57,16 +52,13 @@ pub struct SetMessageReadRequestQuery {
     pub ids: Vec<String>,
 }
 
-pub async fn set_messages_read(
-    State(app_state): State<Arc<AppState>>,
+pub async fn set_messages_read<E: ISessionManager>(
+    State(app_state): State<Arc<AppState<E>>>,
     token: Extension<Token>,
     Json(body): Json<SetMessageReadRequestQuery>,
 ) -> impl IntoResponse {
     let repo = MessageRepository {
-        pg_pool: app_state
-            .db_pool
-            .get()
-            .expect("[get_messages] Could not get db pool"),
+        pg_pool: app_state.get_db_pool(),
     };
     let mut domain = MessageDomain::new(repo);
 

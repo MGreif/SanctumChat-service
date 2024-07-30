@@ -1,14 +1,12 @@
+use crate::appstate::{AppState, IAppState};
 use crate::{
-    config::AppState,
     entities::{
         friends::{repository::FriendRepository, service::FriendDomain},
         messages::{messages::MessageDomain, repository::MessageRepository},
     },
     handler::ws_handler::SocketMessage,
-    helper::jwt::Token,
+    helper::{jwt::Token, session::ISessionManager},
 };
-use async_trait::async_trait;
-use diesel::prelude::*;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -48,25 +46,18 @@ impl SocketMessageDirect {
     }
 }
 
-#[async_trait]
-impl Receivable for SocketMessageDirect {
+impl<S: ISessionManager> Receivable<S> for SocketMessageDirect {
     async fn handle_receive(
         &self,
-        app_state: Arc<AppState>,
+        app_state: Arc<AppState<S>>,
         token: Token,
     ) -> Result<(), super::ws_receive_handler::SocketMessageError> {
         let message_repo = MessageRepository {
-            pg_pool: app_state
-                .db_pool
-                .get()
-                .expect("Could not get db connection to db to save sent message"),
+            pg_pool: app_state.get_db_pool(),
         };
 
         let friend_repo = FriendRepository {
-            pg_pool: app_state
-                .db_pool
-                .get()
-                .expect("Could not get db connection to db to save sent message"),
+            pg_pool: app_state.get_db_pool(),
         };
 
         let mut friend_domain = FriendDomain::new(friend_repo);
@@ -97,7 +88,7 @@ impl Receivable for SocketMessageDirect {
         }
 
         // Get fresh connection to get latest state
-        let client_session = app_state.current_user_connections.lock().await.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await.clone();
+        let client_session = app_state.get_current_user_connections().lock().await.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await.clone();
 
         let direct_message = SocketMessageDirect::new(
             Some(token.sub),
@@ -123,7 +114,11 @@ impl Receivable for SocketMessageDirect {
             .send_direct_message(SocketMessage::SocketMessageDirect(direct_message.clone()))
             .await;
 
-        let current_user_connections = app_state.current_user_connections.lock().await.clone();
+        let current_user_connections = app_state
+            .get_current_user_connections()
+            .lock()
+            .await
+            .clone();
         let recipient_session_manager = current_user_connections.get(recipient).clone();
         match recipient_session_manager {
             None => {}
