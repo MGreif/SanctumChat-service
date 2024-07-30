@@ -3,7 +3,7 @@ use std::time::Duration;
 use crate::{
     helper::{
         errors::HTTPResponse,
-        jwt::{create_user_token, generate_token_expiration, hash_string, token_into_typed, Token},
+        jwt::{create_user_token, generate_token_expiration, hash_string, Token},
     },
     models::UserDTO,
 };

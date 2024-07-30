@@ -15,8 +15,8 @@ use crate::{
     config::{AppState, ConfigManager},
     entities::{friends, messages, users},
     handler::{version_handler, ws_handler},
+    interfaces::http::middlewares,
     logging::{OnRequestLogger, OnResponseLogger},
-    middlewares,
 };
 
 pub fn get_main_router(

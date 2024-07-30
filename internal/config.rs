@@ -112,12 +112,12 @@ impl AppState {
             .expect("[get_friends] Could not get connection pool");
         let friends_from_db = get_friends_for_user_from_db(&mut pool, client_uuid).await;
         let mut friends: HashMap<String, Arc<Mutex<SessionManager>>> = HashMap::new();
-        let current_user_connections_connections = self.current_user_connections.lock().await;
+        let current_user_connections = self.current_user_connections.lock().await;
 
         // Currently just iterating over entire current_user_connections_state
         for user in friends_from_db.iter() {
             // Get sessionmanager from current_user_connections pool
-            let session_manager = match current_user_connections_connections.get(&user.username) {
+            let session_manager = match current_user_connections.get(&user.username) {
                 Some(sm) => sm,
                 None => continue,
             };

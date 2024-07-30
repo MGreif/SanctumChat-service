@@ -1,10 +1,19 @@
-use std::sync::Arc;
-use axum::{response::Response, middleware::Next, http::{Request, StatusCode, HeaderMap}, extract::State, body::Body};
-use tracing::info;
 use crate::{config::AppState, helper::jwt::validate_user_token};
+use axum::{
+    body::Body,
+    extract::State,
+    http::{HeaderMap, Request, StatusCode},
+    middleware::Next,
+    response::Response,
+};
+use std::sync::Arc;
 
-pub async fn bearer_token_validation<'a>( State(app_state): State<Arc<AppState>>, headers: HeaderMap, request: Request<Body>, next: Next) -> Result<Response, StatusCode> {
-
+pub async fn bearer_token_validation<'a>(
+    State(app_state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    request: Request<Body>,
+    next: Next,
+) -> Result<Response, StatusCode> {
     let auth_header = match headers.get("authorization") {
         None => return Err(StatusCode::UNAUTHORIZED),
         Some(header) => {
@@ -16,7 +25,7 @@ pub async fn bearer_token_validation<'a>( State(app_state): State<Arc<AppState>>
 
     match validate_user_token(auth_header, app_state.config.env.HASHING_KEY.as_bytes()) {
         Err(_) => return Err(StatusCode::UNAUTHORIZED),
-        Ok(_) => {},
+        Ok(_) => {}
     };
 
     let response: Response = next.run(request).await;

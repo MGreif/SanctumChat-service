@@ -13,7 +13,6 @@ mod handler;
 mod helper;
 mod interfaces;
 mod logging;
-mod middlewares;
 mod models_test;
 mod scheduler;
 mod validation;
