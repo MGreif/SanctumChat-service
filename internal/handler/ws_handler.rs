@@ -2,13 +2,13 @@ use std::sync::Arc;
 
 use super::socket_handler::ws_handle_direct::SocketMessageDirect;
 use crate::{
-    appstate::AppState,
-    appstate::IAppState,
+    appstate::{AppState, IAppState},
     handler::socket_handler::ws_receive_handler::{ws_receive_handler, SocketMessageError},
     helper::{
         jwt::{token_into_typed, validate_user_token},
         session::ISessionManager,
     },
+    persistence::connection_manager::IConnectionManager,
 };
 use axum::{
     extract::{
@@ -28,9 +28,9 @@ pub struct WsQuery {
     token: String,
 }
 
-pub async fn ws_handler<S: ISessionManager>(
+pub async fn ws_handler<S: ISessionManager, C: IConnectionManager>(
     ws: WebSocketUpgrade,
-    State(app_state): State<Arc<AppState<S>>>,
+    State(app_state): State<Arc<AppState<S, C>>>,
     Query(query): Query<WsQuery>,
 ) -> Response {
     ws.on_upgrade(move |socket| handle_socket(socket, app_state.to_owned(), query))
@@ -137,9 +137,9 @@ pub enum SocketMessage {
     SocketMessageFriendRequest(SocketMessageFriendRequest),
 }
 
-async fn handle_socket<S: ISessionManager>(
+async fn handle_socket<S: ISessionManager, C: IConnectionManager>(
     stream: WebSocket,
-    app_state: Arc<AppState<S>>,
+    app_state: Arc<AppState<S, C>>,
     query: WsQuery,
 ) {
     let (sender, mut receiver) = stream.split();

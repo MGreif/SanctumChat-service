@@ -2,11 +2,11 @@ use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
 use axum::async_trait;
 use diesel::{
-    r2d2::{self, ConnectionManager, Pool},
+    r2d2::{self},
     PgConnection,
 };
-use futures::lock::Mutex;
 use tokio::sync::broadcast;
+use tokio::sync::Mutex;
 use tracing::info;
 
 use crate::{
@@ -15,6 +15,7 @@ use crate::{
     helper::{
         jwt::check_token_expiration, session::ISessionManager, sql::get_friends_for_user_from_db,
     },
+    persistence::connection_manager::IConnectionManager,
 };
 
 #[async_trait]
@@ -36,25 +37,26 @@ pub trait IAppState<T: ISessionManager>: Debug + Send + Sync {
 }
 
 #[derive(Debug)]
-pub struct AppState<T>
+pub struct AppState<T, C>
 where
     T: ISessionManager,
+    C: IConnectionManager,
 {
-    pub db_pool: r2d2::Pool<r2d2::ConnectionManager<PgConnection>>,
+    pub connection_manager: C,
     pub broadcast: broadcast::Sender<String>,
     // Hashmap of currently logged in users
     pub current_user_connections: Arc<Mutex<HashMap<String, Arc<Mutex<T>>>>>,
     pub config: ConfigManager,
 }
 
-unsafe impl<T: ISessionManager> Send for AppState<T> {}
-unsafe impl<T: ISessionManager> Sync for AppState<T> {}
+unsafe impl<T: ISessionManager, C: IConnectionManager> Send for AppState<T, C> {}
+unsafe impl<T: ISessionManager, C: IConnectionManager> Sync for AppState<T, C> {}
 
-impl<T: ISessionManager> AppState<T> {
-    pub fn new(pool: Pool<ConnectionManager<PgConnection>>, config: ConfigManager) -> Self {
+impl<T: ISessionManager, C: IConnectionManager> AppState<T, C> {
+    pub fn new(cm: C, config: ConfigManager) -> Self {
         let (tx, _rx) = broadcast::channel(100);
         AppState {
-            db_pool: pool,
+            connection_manager: cm,
             broadcast: tx,
             config: config,
             current_user_connections: Arc::new(Mutex::new(HashMap::new())),
@@ -63,7 +65,7 @@ impl<T: ISessionManager> AppState<T> {
 }
 
 #[async_trait]
-impl<T: ISessionManager> IAppState<T> for AppState<T> {
+impl<T: ISessionManager, C: IConnectionManager> IAppState<T> for AppState<T, C> {
     fn get_config(&self) -> ConfigManager {
         self.config.clone()
     }
@@ -71,7 +73,9 @@ impl<T: ISessionManager> IAppState<T> for AppState<T> {
         &self.current_user_connections
     }
     fn get_db_pool(&self) -> r2d2::PooledConnection<r2d2::ConnectionManager<PgConnection>> {
-        self.db_pool.get().expect("Could not get db pool")
+        self.connection_manager
+            .get()
+            .expect("Could not get db pool")
     }
     async fn insert_into_current_user_connections(&self, session_manager: T) {
         let mut current_user_connections = self.current_user_connections.lock().await;
@@ -116,7 +120,6 @@ impl<T: ISessionManager> IAppState<T> for AppState<T> {
         }
         for user_id in to_be_removed {
             let session_manager = self
-                .clone()
                 .remove_from_current_user_connections(&user_id)
                 .await
                 .expect("Could not remove from current_user_connections");
@@ -146,7 +149,7 @@ impl<T: ISessionManager> IAppState<T> for AppState<T> {
         client_uuid: &String,
     ) -> HashMap<String, Arc<Mutex<T>>> {
         let mut pool = self
-            .db_pool
+            .connection_manager
             .get()
             .expect("[get_friends] Could not get connection pool");
         let friends_from_db = get_friends_for_user_from_db(&mut pool, client_uuid).await;

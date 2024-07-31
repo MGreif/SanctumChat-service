@@ -1,6 +1,7 @@
 use crate::appstate::{AppState, IAppState};
 use crate::helper::errors::HTTPResponse;
 use crate::helper::session::ISessionManager;
+use crate::persistence::connection_manager::IConnectionManager;
 use crate::validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR;
 use crate::{
     helper::{
@@ -39,8 +40,8 @@ pub struct GetUserQueryDTO {
     pub name: Option<String>,
 }
 
-pub async fn create_user<'a, S: ISessionManager>(
-    State(state): State<Arc<AppState<S>>>,
+pub async fn create_user<'a, S: ISessionManager, C: IConnectionManager>(
+    State(state): State<Arc<AppState<S, C>>>,
     Json(body): Json<UserCreateDTO>,
 ) -> impl IntoResponse {
     let user_repository = UserRepository {
@@ -169,8 +170,8 @@ pub struct LoginDTO {
     pub password: String,
 }
 
-pub async fn logout<S: ISessionManager>(
-    State(state): State<Arc<AppState<S>>>,
+pub async fn logout<S: ISessionManager, C: IConnectionManager>(
+    State(state): State<Arc<AppState<S, C>>>,
     token: Extension<Token>,
 ) -> impl IntoResponse {
     let session_manager = match state.remove_from_current_user_connections(&token.sub).await {
@@ -187,7 +188,7 @@ pub async fn logout<S: ISessionManager>(
     session_manager
         .lock()
         .await
-        .notify_offline(&state as &AppState<S>)
+        .notify_offline(&state as &AppState<S, C>)
         .await;
 
     HTTPResponse::<()> {
@@ -197,8 +198,8 @@ pub async fn logout<S: ISessionManager>(
     }
 }
 
-pub async fn login<S: ISessionManager>(
-    State(state): State<Arc<AppState<S>>>,
+pub async fn login<S: ISessionManager, C: IConnectionManager>(
+    State(state): State<Arc<AppState<S, C>>>,
     Json(body): Json<LoginDTO>,
 ) -> impl IntoResponse {
     let LoginDTO {
@@ -257,7 +258,7 @@ pub async fn login<S: ISessionManager>(
 
     let session_manager = S::new(user.clone(), token);
     session_manager
-        .notify_online(&state.clone() as &AppState<S>)
+        .notify_online(&state.clone() as &AppState<S, C>)
         .await;
     state
         .insert_into_current_user_connections(session_manager)

@@ -1,5 +1,9 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
+use crate::{
+    appstate::IAppState, handler::ws_handler::SocketMessage,
+    persistence::connection_manager::IConnectionManager, AppState,
+};
 use axum::async_trait;
 use tokio::sync::broadcast::Sender;
 
@@ -35,16 +39,42 @@ impl ISessionManager for MockSessionManager {
         return Self { a: '\x11' as u8 };
     }
 
-    async fn notify_online(&self) {}
-    async fn notify_offline(&self) {}
+    async fn notify_online(&self, app_state: &impl IAppState<MockSessionManager>) {}
+    async fn notify_offline(&self, app_state: &impl IAppState<MockSessionManager>) {}
+    async fn send_direct_message(&self, message: SocketMessage) {}
+}
+
+#[derive(Debug)]
+struct MockConnectionManager {}
+
+impl IConnectionManager for MockConnectionManager {
+    fn get(
+        &self,
+    ) -> Result<
+        diesel::r2d2::PooledConnection<diesel::r2d2::ConnectionManager<diesel::PgConnection>>,
+        String,
+    > {
+        Err(String::from("Its mocked, so its okay"))
+    }
 }
 
 mod tests {
+    use std::{collections::HashMap, sync::Arc};
+
+    use tokio::sync::broadcast;
+
     use super::*;
-    use crate::appstate;
+    use crate::config::ConfigManager;
 
     #[tokio::test]
-    async fn test_something() {
-        assert!("1" == "1");
+    async fn test_app_state_setup() {
+        let current_user_connections: HashMap<String, Arc<tokio::sync::Mutex<MockSessionManager>>> =
+            HashMap::new();
+        let app_state = AppState {
+            broadcast: broadcast::Sender::new(1),
+            config: ConfigManager::new(),
+            current_user_connections: Arc::new(tokio::sync::Mutex::new(current_user_connections)),
+            connection_manager: MockConnectionManager {},
+        };
     }
 }

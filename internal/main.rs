@@ -1,31 +1,24 @@
 use appstate::AppState;
-use config::EnvConfig;
-use diesel::r2d2::{ConnectionManager, Pool};
 use helper::session::SessionManager;
 use interfaces::http::router::initialize_http_server;
+use persistence::connection_manager::ConnectionManager;
 use scheduler::session_cleanup::initialize_session_cleanup_schedule;
 use std::net::SocketAddr;
 use std::sync::Arc;
-mod models;
-mod schema;
-use diesel::prelude::*;
 mod config;
 mod entities;
 mod handler;
 mod helper;
 mod interfaces;
 mod logging;
+mod models;
 mod models_test;
 mod scheduler;
+mod schema;
 mod validation;
 use logging::initialize_logger;
 mod appstate;
-
-fn get_connection_pool(env_config: EnvConfig) -> Pool<ConnectionManager<PgConnection>> {
-    let manager = ConnectionManager::<PgConnection>::new(env_config.DATABASE_URL);
-    let pool = Pool::new(manager).expect("Failed to create connection pool");
-    pool
-}
+mod persistence;
 
 #[tokio::main]
 async fn main() {
@@ -34,8 +27,11 @@ async fn main() {
     // This is needed. If the guards are _, the variables are deallocated and the logging does not work anymore
     let (_access_guard, _error_guard) = initialize_logger();
 
-    let pool = get_connection_pool(config.env.clone());
-    let app_state = Arc::new(AppState::<SessionManager>::new(pool, config.clone()));
+    let connection_manager = ConnectionManager::new(config.env.clone());
+    let app_state = Arc::new(AppState::<SessionManager, ConnectionManager>::new(
+        connection_manager,
+        config.clone(),
+    ));
 
     initialize_session_cleanup_schedule(app_state.clone());
 

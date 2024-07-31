@@ -7,6 +7,7 @@ use crate::helper::jwt::Token;
 use crate::helper::pagination::Pagination;
 use crate::helper::session::ISessionManager;
 use crate::models::Message;
+use crate::persistence::connection_manager::IConnectionManager;
 use axum::extract::Query;
 use axum::http::StatusCode;
 use axum::{extract::State, response::IntoResponse};
@@ -23,8 +24,8 @@ pub struct GetMessageDTO {
     pub index: Option<u8>,
 }
 
-pub async fn get_messages<S: ISessionManager>(
-    State(app_state): State<Arc<AppState<S>>>,
+pub async fn get_messages<S: ISessionManager, C: IConnectionManager>(
+    State(app_state): State<Arc<AppState<S, C>>>,
     Query(query): Query<GetMessageDTO>,
     token: Extension<Token>,
 ) -> impl IntoResponse {
@@ -52,8 +53,8 @@ pub struct SetMessageReadRequestQuery {
     pub ids: Vec<String>,
 }
 
-pub async fn set_messages_read<E: ISessionManager>(
-    State(app_state): State<Arc<AppState<E>>>,
+pub async fn set_messages_read<S: ISessionManager, C: IConnectionManager>(
+    State(app_state): State<Arc<AppState<S, C>>>,
     token: Extension<Token>,
     Json(body): Json<SetMessageReadRequestQuery>,
 ) -> impl IntoResponse {

@@ -8,6 +8,7 @@ use crate::helper::errors::HTTPResponse;
 use crate::helper::jwt::Token;
 use crate::helper::session::ISessionManager;
 use crate::models::FriendRequest;
+use crate::persistence::connection_manager::IConnectionManager;
 use crate::validation::string_validate::UuidValidator;
 use axum::extract::Path;
 use axum::http::StatusCode;
@@ -32,8 +33,8 @@ pub struct FriendRequestGETResponseDTO {
     #[diesel(sql_type = Nullable<Bool>)]
     pub accepted: Option<bool>,
 }
-pub async fn get_friend_requests<S: ISessionManager>(
-    State(app_state): State<Arc<AppState<S>>>,
+pub async fn get_friend_requests<S: ISessionManager, C: IConnectionManager>(
+    State(app_state): State<Arc<AppState<S, C>>>,
     token: Extension<Token>,
 ) -> impl IntoResponse {
     let friend_request_repository = FriendRequestRepository {
@@ -55,8 +56,8 @@ pub async fn get_friend_requests<S: ISessionManager>(
     .into_response();
 }
 
-pub async fn create_friend_request<S: ISessionManager>(
-    State(app_state): State<Arc<AppState<S>>>,
+pub async fn create_friend_request<S: ISessionManager, C: IConnectionManager>(
+    State(app_state): State<Arc<AppState<S, C>>>,
     token: Extension<Token>,
     Json(body): Json<FriendRequestPOSTRequestDTO>,
 ) -> impl IntoResponse {

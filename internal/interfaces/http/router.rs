@@ -19,10 +19,11 @@ use crate::{
     helper::session::{ISessionManager, SessionManager},
     interfaces::http::middlewares,
     logging::{OnRequestLogger, OnResponseLogger},
+    persistence::connection_manager::IConnectionManager,
 };
 
-pub fn get_main_router<S: ISessionManager>(
-    app_state: &Arc<AppState<S>>,
+pub fn get_main_router<S: ISessionManager, C: IConnectionManager>(
+    app_state: &Arc<AppState<S, C>>,
     config: ConfigManager,
     cors: CorsLayer,
 ) -> Router {
@@ -67,8 +68,8 @@ pub fn get_main_router<S: ISessionManager>(
     return main;
 }
 
-pub fn initialize_http_server<S: ISessionManager>(
-    app_state: &Arc<AppState<S>>,
+pub fn initialize_http_server<S: ISessionManager, C: IConnectionManager>(
+    app_state: &Arc<AppState<S, C>>,
     config: ConfigManager,
 ) -> Router {
     let origin: AllowOrigin = match &config.env.CORS_ORIGIN {

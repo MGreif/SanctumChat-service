@@ -1,4 +1,5 @@
 use crate::appstate::{AppState, IAppState};
+use crate::persistence::connection_manager::IConnectionManager;
 use crate::{
     entities::{
         friends::{repository::FriendRepository, service::FriendDomain},
@@ -46,10 +47,10 @@ impl SocketMessageDirect {
     }
 }
 
-impl<S: ISessionManager> Receivable<S> for SocketMessageDirect {
+impl<S: ISessionManager, C: IConnectionManager> Receivable<S, C> for SocketMessageDirect {
     async fn handle_receive(
         &self,
-        app_state: Arc<AppState<S>>,
+        app_state: Arc<AppState<S, C>>,
         token: Token,
     ) -> Result<(), super::ws_receive_handler::SocketMessageError> {
         let message_repo = MessageRepository {
