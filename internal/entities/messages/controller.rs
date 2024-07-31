@@ -2,10 +2,11 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use crate::appstate::{AppState, IAppState};
+use crate::entities::friends::repository::IFriendRepository;
 use crate::helper::errors::HTTPResponse;
 use crate::helper::jwt::Token;
 use crate::helper::pagination::Pagination;
-use crate::helper::session::ISessionManager;
+use crate::helper::session::{ISession, ISessionManager};
 use crate::models::Message;
 use crate::persistence::connection_manager::IConnectionManager;
 use axum::extract::Query;
@@ -24,8 +25,13 @@ pub struct GetMessageDTO {
     pub index: Option<u8>,
 }
 
-pub async fn get_messages<S: ISessionManager, C: IConnectionManager>(
-    State(app_state): State<Arc<AppState<S, C>>>,
+pub async fn get_messages<
+    SM: ISessionManager<S, F>,
+    S: ISession<F>,
+    F: IFriendRepository,
+    C: IConnectionManager,
+>(
+    State(app_state): State<Arc<AppState<SM, S, C, F>>>,
     Query(query): Query<GetMessageDTO>,
     token: Extension<Token>,
 ) -> impl IntoResponse {
@@ -53,8 +59,13 @@ pub struct SetMessageReadRequestQuery {
     pub ids: Vec<String>,
 }
 
-pub async fn set_messages_read<S: ISessionManager, C: IConnectionManager>(
-    State(app_state): State<Arc<AppState<S, C>>>,
+pub async fn set_messages_read<
+    SM: ISessionManager<S, F>,
+    S: ISession<F>,
+    F: IFriendRepository,
+    C: IConnectionManager,
+>(
+    State(app_state): State<Arc<AppState<SM, S, C, F>>>,
     token: Extension<Token>,
     Json(body): Json<SetMessageReadRequestQuery>,
 ) -> impl IntoResponse {

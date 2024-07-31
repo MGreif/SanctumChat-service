@@ -3,10 +3,11 @@ use std::sync::Arc;
 use super::socket_handler::ws_handle_direct::SocketMessageDirect;
 use crate::{
     appstate::{AppState, IAppState},
+    entities::friends::repository::IFriendRepository,
     handler::socket_handler::ws_receive_handler::{ws_receive_handler, SocketMessageError},
     helper::{
         jwt::{token_into_typed, validate_user_token},
-        session::ISessionManager,
+        session::{ISession, ISessionManager},
     },
     persistence::connection_manager::IConnectionManager,
 };
@@ -28,9 +29,14 @@ pub struct WsQuery {
     token: String,
 }
 
-pub async fn ws_handler<S: ISessionManager, C: IConnectionManager>(
+pub async fn ws_handler<
+    SM: ISessionManager<S, F>,
+    S: ISession<F>,
+    F: IFriendRepository,
+    C: IConnectionManager,
+>(
     ws: WebSocketUpgrade,
-    State(app_state): State<Arc<AppState<S, C>>>,
+    State(app_state): State<Arc<AppState<SM, S, C, F>>>,
     Query(query): Query<WsQuery>,
 ) -> Response {
     ws.on_upgrade(move |socket| handle_socket(socket, app_state.to_owned(), query))
@@ -137,9 +143,14 @@ pub enum SocketMessage {
     SocketMessageFriendRequest(SocketMessageFriendRequest),
 }
 
-async fn handle_socket<S: ISessionManager, C: IConnectionManager>(
+async fn handle_socket<
+    SM: ISessionManager<S, F>,
+    S: ISession<F>,
+    F: IFriendRepository,
+    C: IConnectionManager,
+>(
     stream: WebSocket,
-    app_state: Arc<AppState<S, C>>,
+    app_state: Arc<AppState<SM, S, C, F>>,
     query: WsQuery,
 ) {
     let (sender, mut receiver) = stream.split();
@@ -176,8 +187,11 @@ async fn handle_socket<S: ISessionManager, C: IConnectionManager>(
     .unwrap();
     let token2 = token.clone();
 
-    let current_user_connections_connection =
-        app_state_orig.get_current_user_connections().lock().await;
+    let current_user_connections_connection = app_state_orig
+        .get_session_manager()
+        .get_current_user_connections()
+        .lock()
+        .await;
     let client_session = current_user_connections_connection.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await;
 
     let mut client_session_receiver = client_session.get_user_socket().subscribe();
@@ -186,6 +200,7 @@ async fn handle_socket<S: ISessionManager, C: IConnectionManager>(
 
     // get online friends at client start/initialization
     let friends = app_state_orig
+        .get_session_manager()
         .get_friends_in_current_user_connections(&token.sub)
         .await;
 
@@ -262,14 +277,14 @@ async fn handle_socket<S: ISessionManager, C: IConnectionManager>(
     tokio::select! {
         _ = (&mut handle_receive_task) => {
             handle_client_session_receive_task.abort();
-            match app_state_clone2.remove_from_current_user_connections(&token2.sub).await {
+            match app_state_clone2.get_session_manager().remove_from_current_user_connections(&token2.sub).await {
                 Ok(_) => {},
                 Err(err) => return info!("Error ocurred removing user from current_user_connections: {}; Maybe the user session expired or the user already logged out", err)
             };
         },
         _ = (&mut handle_client_session_receive_task) => {
             handle_receive_task.abort();
-            match app_state_clone2.remove_from_current_user_connections(&token2.sub).await {
+            match app_state_clone2.get_session_manager().remove_from_current_user_connections(&token2.sub).await {
                 Ok(_) => {},
                 Err(err) => info!("Error ocurred removing user from current_user_connections: {}; Maybe the user session expired or the user already logged out", err)
             };

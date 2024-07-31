@@ -1,4 +1,6 @@
 use crate::appstate::{AppState, IAppState};
+use crate::entities::friends::repository::IFriendRepository;
+use crate::helper::session::ISessionManager;
 use crate::persistence::connection_manager::IConnectionManager;
 use crate::{
     entities::{
@@ -6,7 +8,7 @@ use crate::{
         messages::{messages::MessageDomain, repository::MessageRepository},
     },
     handler::ws_handler::SocketMessage,
-    helper::{jwt::Token, session::ISessionManager},
+    helper::{jwt::Token, session::ISession},
 };
 use std::sync::Arc;
 use uuid::Uuid;
@@ -47,10 +49,12 @@ impl SocketMessageDirect {
     }
 }
 
-impl<S: ISessionManager, C: IConnectionManager> Receivable<S, C> for SocketMessageDirect {
+impl<SM: ISessionManager<S, F>, S: ISession<F>, F: IFriendRepository, C: IConnectionManager>
+    Receivable<SM, S, F, C> for SocketMessageDirect
+{
     async fn handle_receive(
         &self,
-        app_state: Arc<AppState<S, C>>,
+        app_state: Arc<AppState<SM, S, C, F>>,
         token: Token,
     ) -> Result<(), super::ws_receive_handler::SocketMessageError> {
         let message_repo = MessageRepository {
@@ -58,7 +62,7 @@ impl<S: ISessionManager, C: IConnectionManager> Receivable<S, C> for SocketMessa
         };
 
         let friend_repo = FriendRepository {
-            pg_pool: app_state.get_db_pool(),
+            pg_pool: C::new(app_state.get_config().env),
         };
 
         let mut friend_domain = FriendDomain::new(friend_repo);
@@ -89,7 +93,7 @@ impl<S: ISessionManager, C: IConnectionManager> Receivable<S, C> for SocketMessa
         }
 
         // Get fresh connection to get latest state
-        let client_session = app_state.get_current_user_connections().lock().await.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await.clone();
+        let client_session = app_state.get_session_manager().get_current_user_connections().lock().await.get(&token.sub).expect("Error getting client session. This should not appear because a session in create on login/token validations").lock().await.clone();
 
         let direct_message = SocketMessageDirect::new(
             Some(token.sub),
@@ -116,6 +120,7 @@ impl<S: ISessionManager, C: IConnectionManager> Receivable<S, C> for SocketMessa
             .await;
 
         let current_user_connections = app_state
+            .current_user_connections
             .get_current_user_connections()
             .lock()
             .await

@@ -2,8 +2,12 @@ use std::sync::Arc;
 
 use crate::{
     appstate::AppState,
+    entities::friends::repository::IFriendRepository,
     handler::ws_handler::SocketMessage,
-    helper::{jwt::Token, session::ISessionManager},
+    helper::{
+        jwt::Token,
+        session::{ISession, ISessionManager},
+    },
     persistence::connection_manager::IConnectionManager,
 };
 
@@ -22,17 +26,28 @@ impl SocketMessageError {
     }
 }
 
-pub trait Receivable<S: ISessionManager, C: IConnectionManager> {
+pub trait Receivable<
+    SM: ISessionManager<S, F>,
+    S: ISession<F>,
+    F: IFriendRepository,
+    C: IConnectionManager,
+>
+{
     async fn handle_receive(
         &self,
-        app_state: Arc<AppState<S, C>>,
+        app_state: Arc<AppState<SM, S, C, F>>,
         token: Token,
     ) -> Result<(), SocketMessageError>;
 }
 
-pub async fn ws_receive_handler<S: ISessionManager, C: IConnectionManager>(
+pub async fn ws_receive_handler<
+    SM: ISessionManager<S, F>,
+    S: ISession<F>,
+    F: IFriendRepository,
+    C: IConnectionManager,
+>(
     message: SocketMessage,
-    app_state: Arc<AppState<S, C>>,
+    app_state: Arc<AppState<SM, S, C, F>>,
     token: Token,
 ) -> Result<(), SocketMessageError> {
     match message {

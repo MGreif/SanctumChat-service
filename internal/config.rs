@@ -2,7 +2,7 @@ use crate::{
     handler::ws_handler::SocketMessageNotification,
     helper::{
         jwt::check_token_expiration,
-        session::{ISessionManager, SessionManager},
+        session::{ISession, Session},
         sql::get_friends_for_user_from_db,
     },
 };

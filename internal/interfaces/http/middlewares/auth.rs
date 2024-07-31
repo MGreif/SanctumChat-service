@@ -1,6 +1,10 @@
 use crate::{
     appstate::{AppState, IAppState},
-    helper::{jwt::validate_user_token, session::ISessionManager},
+    entities::friends::repository::IFriendRepository,
+    helper::{
+        jwt::validate_user_token,
+        session::{ISession, ISessionManager},
+    },
     persistence::connection_manager::IConnectionManager,
 };
 use axum::{
@@ -12,8 +16,14 @@ use axum::{
 };
 use std::sync::Arc;
 
-pub async fn bearer_token_validation<'a, S: ISessionManager, C: IConnectionManager>(
-    State(app_state): State<Arc<AppState<S, C>>>,
+pub async fn bearer_token_validation<
+    'a,
+    SM: ISessionManager<S, F>,
+    S: ISession<F>,
+    F: IFriendRepository,
+    C: IConnectionManager,
+>(
+    State(app_state): State<Arc<AppState<SM, S, C, F>>>,
     headers: HeaderMap,
     request: Request<Body>,
     next: Next,

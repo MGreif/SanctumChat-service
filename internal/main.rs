@@ -1,7 +1,9 @@
 use appstate::AppState;
-use helper::session::SessionManager;
+use entities::friends::repository::FriendRepository;
+use entities::friends::service::FriendDomain;
+use helper::session::{Session, SessionManager};
 use interfaces::http::router::initialize_http_server;
-use persistence::connection_manager::ConnectionManager;
+use persistence::connection_manager::{ConnectionManager, IConnectionManager};
 use scheduler::session_cleanup::initialize_session_cleanup_schedule;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -19,6 +21,7 @@ mod validation;
 use logging::initialize_logger;
 mod appstate;
 mod persistence;
+mod tests;
 
 #[tokio::main]
 async fn main() {
@@ -26,11 +29,19 @@ async fn main() {
 
     // This is needed. If the guards are _, the variables are deallocated and the logging does not work anymore
     let (_access_guard, _error_guard) = initialize_logger();
-
     let connection_manager = ConnectionManager::new(config.env.clone());
-    let app_state = Arc::new(AppState::<SessionManager, ConnectionManager>::new(
-        connection_manager,
-        config.clone(),
+
+    let friend_domain = FriendDomain::new(FriendRepository {
+        pg_pool: connection_manager.clone(),
+    });
+    let session_manager = SessionManager::new(friend_domain);
+    let app_state = Arc::new(AppState::<
+        SessionManager<Session, FriendRepository<ConnectionManager>>,
+        Session,
+        ConnectionManager,
+        FriendRepository<ConnectionManager>,
+    >::new(
+        connection_manager, config.clone(), session_manager
     ));
 
     initialize_session_cleanup_schedule(app_state.clone());
@@ -47,5 +58,3 @@ async fn main() {
     .await
     .unwrap();
 }
-
-mod appstate_test;

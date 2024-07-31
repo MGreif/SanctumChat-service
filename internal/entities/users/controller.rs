@@ -1,13 +1,14 @@
 use crate::appstate::{AppState, IAppState};
+use crate::entities::friends::repository::IFriendRepository;
 use crate::helper::errors::HTTPResponse;
-use crate::helper::session::ISessionManager;
+use crate::helper::session::{ISession, ISessionManager};
 use crate::persistence::connection_manager::IConnectionManager;
 use crate::validation::string_validate::DEFAULT_INPUT_FIELD_STRING_VALIDATOR;
 use crate::{
     helper::{
         jwt::{hash_string, Token},
         keys::{generate_rsa_key_pair, validate_public_key},
-        session::SessionManager,
+        session::Session,
     },
     models::UserDTO,
 };
@@ -40,8 +41,14 @@ pub struct GetUserQueryDTO {
     pub name: Option<String>,
 }
 
-pub async fn create_user<'a, S: ISessionManager, C: IConnectionManager>(
-    State(state): State<Arc<AppState<S, C>>>,
+pub async fn create_user<
+    'a,
+    SM: ISessionManager<S, F>,
+    S: ISession<F>,
+    F: IFriendRepository,
+    C: IConnectionManager,
+>(
+    State(state): State<Arc<AppState<SM, S, C, F>>>,
     Json(body): Json<UserCreateDTO>,
 ) -> impl IntoResponse {
     let user_repository = UserRepository {
@@ -170,11 +177,20 @@ pub struct LoginDTO {
     pub password: String,
 }
 
-pub async fn logout<S: ISessionManager, C: IConnectionManager>(
-    State(state): State<Arc<AppState<S, C>>>,
+pub async fn logout<
+    SM: ISessionManager<S, F>,
+    S: ISession<F>,
+    F: IFriendRepository,
+    C: IConnectionManager,
+>(
+    State(state): State<Arc<AppState<SM, S, C, F>>>,
     token: Extension<Token>,
 ) -> impl IntoResponse {
-    let session_manager = match state.remove_from_current_user_connections(&token.sub).await {
+    let session = match state
+        .get_session_manager()
+        .remove_from_current_user_connections(&token.sub)
+        .await
+    {
         Ok(sm) => sm,
         Err(err) => {
             return HTTPResponse::<()> {
@@ -185,10 +201,10 @@ pub async fn logout<S: ISessionManager, C: IConnectionManager>(
         }
     };
 
-    session_manager
+    session
         .lock()
         .await
-        .notify_offline(&state as &AppState<S, C>)
+        .notify_offline(state.get_session_manager())
         .await;
 
     HTTPResponse::<()> {
@@ -198,8 +214,13 @@ pub async fn logout<S: ISessionManager, C: IConnectionManager>(
     }
 }
 
-pub async fn login<S: ISessionManager, C: IConnectionManager>(
-    State(state): State<Arc<AppState<S, C>>>,
+pub async fn login<
+    SM: ISessionManager<S, F>,
+    S: ISession<F>,
+    F: IFriendRepository,
+    C: IConnectionManager,
+>(
+    State(state): State<Arc<AppState<SM, S, C, F>>>,
     Json(body): Json<LoginDTO>,
 ) -> impl IntoResponse {
     let LoginDTO {
@@ -256,12 +277,11 @@ pub async fn login<S: ISessionManager, C: IConnectionManager>(
         Err(err) => return (headers, err.into_response()),
     };
 
-    let session_manager = S::new(user.clone(), token);
-    session_manager
-        .notify_online(&state.clone() as &AppState<S, C>)
-        .await;
+    let session = S::new(user.clone(), token);
+    session.notify_online(state.get_session_manager()).await;
     state
-        .insert_into_current_user_connections(session_manager)
+        .get_session_manager()
+        .insert_into_current_user_connections(session)
         .await;
 
     headers.insert(
@@ -285,7 +305,13 @@ pub async fn login<S: ISessionManager, C: IConnectionManager>(
     )
 }
 
-pub async fn token<'a, S: ISessionManager, T: IAppState<S>>(
+pub async fn token<
+    'a,
+    SM: ISessionManager<S, F>,
+    F: IFriendRepository,
+    S: ISession<F>,
+    T: IAppState<F, SM, S>,
+>(
     State(app_state): State<Arc<T>>,
     Extension(token): Extension<Token>,
 ) -> impl IntoResponse {
@@ -312,6 +338,7 @@ pub async fn token<'a, S: ISessionManager, T: IAppState<S>>(
 
     let session_manager = S::new(user.clone(), token);
     app_state
+        .get_session_manager()
         .insert_into_current_user_connections(session_manager)
         .await;
 

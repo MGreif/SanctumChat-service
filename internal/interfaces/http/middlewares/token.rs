@@ -10,12 +10,22 @@ use axum::{
 
 use crate::{
     appstate::{AppState, IAppState},
-    helper::{errors::HTTPResponse, jwt::token_into_typed, session::ISessionManager},
+    entities::friends::repository::IFriendRepository,
+    helper::{
+        errors::HTTPResponse,
+        jwt::token_into_typed,
+        session::{ISession, ISessionManager},
+    },
     persistence::connection_manager::IConnectionManager,
 };
 
-pub async fn token_mw<S: ISessionManager, C: IConnectionManager>(
-    State(app_state): State<Arc<AppState<S, C>>>,
+pub async fn token_mw<
+    SM: ISessionManager<S, F>,
+    S: ISession<F>,
+    F: IFriendRepository,
+    C: IConnectionManager,
+>(
+    State(app_state): State<Arc<AppState<SM, S, C, F>>>,
     mut request: Request<Body>,
     next: Next,
 ) -> Result<Response, HTTPResponse<()>> {

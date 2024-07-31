@@ -9,6 +9,7 @@ use crate::config::EnvConfig;
 
 pub trait IConnectionManager: Debug + Send + 'static {
     fn get(&self) -> Result<r2d2::PooledConnection<r2d2::ConnectionManager<PgConnection>>, String>;
+    fn new(env: EnvConfig) -> Self;
 }
 
 fn get_connection_pool(env_config: EnvConfig) -> Pool<r2d2::ConnectionManager<PgConnection>> {
@@ -17,16 +18,9 @@ fn get_connection_pool(env_config: EnvConfig) -> Pool<r2d2::ConnectionManager<Pg
     pool
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ConnectionManager {
     pool: Pool<r2d2::ConnectionManager<PgConnection>>,
-}
-
-impl ConnectionManager {
-    pub fn new(env: EnvConfig) -> Self {
-        let pool = get_connection_pool(env);
-        ConnectionManager { pool }
-    }
 }
 
 impl IConnectionManager for ConnectionManager {
@@ -35,5 +29,9 @@ impl IConnectionManager for ConnectionManager {
             Ok(pool) => Ok(pool),
             Err(err) => Err(err.to_string()),
         }
+    }
+    fn new(env: EnvConfig) -> Self {
+        let pool = get_connection_pool(env);
+        ConnectionManager { pool }
     }
 }

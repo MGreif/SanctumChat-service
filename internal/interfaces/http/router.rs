@@ -14,16 +14,24 @@ use tower_http::{
 use crate::{
     appstate::AppState,
     config::ConfigManager,
-    entities::{friends, messages, users},
+    entities::{
+        friends::{self, repository::IFriendRepository},
+        messages, users,
+    },
     handler::{version_handler, ws_handler},
-    helper::session::{ISessionManager, SessionManager},
+    helper::session::{ISession, ISessionManager, Session},
     interfaces::http::middlewares,
     logging::{OnRequestLogger, OnResponseLogger},
     persistence::connection_manager::IConnectionManager,
 };
 
-pub fn get_main_router<S: ISessionManager, C: IConnectionManager>(
-    app_state: &Arc<AppState<S, C>>,
+pub fn get_main_router<
+    SM: ISessionManager<S, F>,
+    S: ISession<F>,
+    F: IFriendRepository,
+    C: IConnectionManager,
+>(
+    app_state: &Arc<AppState<SM, S, C, F>>,
     config: ConfigManager,
     cors: CorsLayer,
 ) -> Router {
@@ -68,8 +76,13 @@ pub fn get_main_router<S: ISessionManager, C: IConnectionManager>(
     return main;
 }
 
-pub fn initialize_http_server<S: ISessionManager, C: IConnectionManager>(
-    app_state: &Arc<AppState<S, C>>,
+pub fn initialize_http_server<
+    SM: ISessionManager<S, F>,
+    S: ISession<F>,
+    F: IFriendRepository,
+    C: IConnectionManager,
+>(
+    app_state: &Arc<AppState<SM, S, C, F>>,
     config: ConfigManager,
 ) -> Router {
     let origin: AllowOrigin = match &config.env.CORS_ORIGIN {

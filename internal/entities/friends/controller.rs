@@ -6,7 +6,7 @@ use crate::entities::friends::service::FriendDomain;
 use crate::handler::ws_handler::{SocketMessage, SocketMessageFriendRequest};
 use crate::helper::errors::HTTPResponse;
 use crate::helper::jwt::Token;
-use crate::helper::session::ISessionManager;
+use crate::helper::session::{ISession, ISessionManager};
 use crate::models::FriendRequest;
 use crate::persistence::connection_manager::IConnectionManager;
 use crate::validation::string_validate::UuidValidator;
@@ -15,7 +15,10 @@ use axum::http::StatusCode;
 use axum::{extract::State, response::IntoResponse, Extension, Json};
 use diesel::prelude::*;
 use diesel::sql_types::{Bool, Nullable, Text, Uuid};
+use std::borrow::BorrowMut;
 use std::sync::Arc;
+
+use super::repository::IFriendRepository;
 
 #[derive(serde::Deserialize, Debug, serde::Serialize)]
 pub struct FriendRequestPOSTRequestDTO {
@@ -33,8 +36,13 @@ pub struct FriendRequestGETResponseDTO {
     #[diesel(sql_type = Nullable<Bool>)]
     pub accepted: Option<bool>,
 }
-pub async fn get_friend_requests<S: ISessionManager, C: IConnectionManager>(
-    State(app_state): State<Arc<AppState<S, C>>>,
+pub async fn get_friend_requests<
+    SM: ISessionManager<S, F>,
+    S: ISession<F>,
+    F: IFriendRepository,
+    C: IConnectionManager,
+>(
+    State(app_state): State<Arc<AppState<SM, S, C, F>>>,
     token: Extension<Token>,
 ) -> impl IntoResponse {
     let friend_request_repository = FriendRequestRepository {
@@ -56,8 +64,13 @@ pub async fn get_friend_requests<S: ISessionManager, C: IConnectionManager>(
     .into_response();
 }
 
-pub async fn create_friend_request<S: ISessionManager, C: IConnectionManager>(
-    State(app_state): State<Arc<AppState<S, C>>>,
+pub async fn create_friend_request<
+    SM: ISessionManager<S, F>,
+    S: ISession<F>,
+    F: IFriendRepository,
+    C: IConnectionManager,
+>(
+    State(app_state): State<Arc<AppState<SM, S, C, F>>>,
     token: Extension<Token>,
     Json(body): Json<FriendRequestPOSTRequestDTO>,
 ) -> impl IntoResponse {
@@ -73,7 +86,11 @@ pub async fn create_friend_request<S: ISessionManager, C: IConnectionManager>(
         Err(err) => return err.into_response(),
     };
 
-    let receiver_session_manager = app_state.get_current_user_connections().lock().await;
+    let receiver_session_manager = app_state
+        .get_session_manager()
+        .get_current_user_connections()
+        .lock()
+        .await;
     let receiver_session_manager = receiver_session_manager.get(&recipient.clone());
     if let Some(sm) = receiver_session_manager {
         let sm = sm.lock().await;
@@ -98,7 +115,12 @@ pub struct FriendRequestPatchDTOBody {
     accepted: bool,
 }
 
-pub async fn patch_friend_request<S: ISessionManager, T: IAppState<S>>(
+pub async fn patch_friend_request<
+    SM: ISessionManager<S, F>,
+    F: IFriendRepository,
+    S: ISession<F>,
+    T: IAppState<F, SM, S>,
+>(
     State(app_state): State<Arc<T>>,
     token: Extension<Token>,
     Path(uuid): Path<String>,
@@ -147,15 +169,20 @@ pub async fn patch_friend_request<S: ISessionManager, T: IAppState<S>>(
     }
 }
 
-pub async fn get_friends<S: ISessionManager, T: IAppState<S>>(
-    State(app_state): State<Arc<T>>,
+pub async fn get_friends<
+    SM: ISessionManager<S, F>,
+    F: IFriendRepository,
+    S: ISession<F>,
+    C: IConnectionManager,
+>(
+    State(app_state): State<Arc<AppState<SM, S, C, F>>>,
     token: Extension<Token>,
 ) -> impl IntoResponse {
     let friend_repository = FriendRepository {
-        pg_pool: app_state.get_db_pool(),
+        pg_pool: C::new(app_state.get_config().env),
     };
-    let mut friendDomain = FriendDomain::new(friend_repository);
-    let result = match friendDomain.get_friends(&token.sub) {
+    let friend_domain = FriendDomain::new(friend_repository);
+    let result = match friend_domain.get_friends(&token.sub) {
         Ok(res) => res,
         Err(err) => return HTTPResponse::<()>::new_internal_error(err).into_response(),
     };
@@ -168,11 +195,18 @@ pub async fn get_friends<S: ISessionManager, T: IAppState<S>>(
     .into_response();
 }
 
-pub async fn get_active_friends<S: ISessionManager, T: IAppState<S>>(
-    State(app_state): State<Arc<T>>,
+pub async fn get_active_friends<
+    SM: ISessionManager<S, F>,
+    F: IFriendRepository,
+    S: ISession<F>,
+    C: IConnectionManager,
+>(
+    State(app_state): State<Arc<AppState<SM, S, C, F>>>,
     token: Extension<Token>,
 ) -> impl IntoResponse {
+    let app_state = app_state;
     let result = app_state
+        .current_user_connections
         .get_friends_in_current_user_connections(&token.sub)
         .await;
     let result = result
