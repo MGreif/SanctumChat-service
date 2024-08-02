@@ -8,6 +8,7 @@ use crate::{
     models::UserDTO,
 };
 use axum::http::StatusCode;
+use tracing::debug;
 
 use super::repository::UserRepositoryInterface;
 
@@ -47,7 +48,10 @@ impl<I: UserRepositoryInterface> UserDomain<I> {
         user.password = encrypted_password;
 
         match self.user_repository.save_user(&user) {
-            Ok(_) => Ok(user),
+            Ok(_) => {
+                debug!(target: "application", "[create_user] user registered {}", &user.username);
+                Ok(user)
+            }
             Err(err) => Err(HTTPResponse::new_internal_error(err)),
         }
     }
@@ -75,7 +79,10 @@ impl<I: UserRepositoryInterface> UserDomain<I> {
         let (valid_for, _) = generate_token_expiration(Duration::new(15 * 60, 0));
 
         let (token, token_str) = create_user_token(user.clone(), hashing_key, valid_for);
-
+        debug!(
+            target: "application", "[login_user_and_prepare_token] user {} logged in",
+            user.clone().username
+        );
         Ok((user, token, token_str))
     }
 
@@ -93,7 +100,7 @@ impl<I: UserRepositoryInterface> UserDomain<I> {
         let (valid_for, _) = generate_token_expiration(Duration::new(15 * 60, 0));
 
         let (token, token_str) = create_user_token(user.clone(), hashing_key, valid_for);
-
+        debug!(target: "application", "[renew_token] renewed token for: {}", user.clone().username);
         return Ok((user, token, token_str));
     }
 }

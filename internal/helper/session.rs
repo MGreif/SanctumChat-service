@@ -10,7 +10,7 @@ use axum::async_trait;
 use futures::lock::Mutex;
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 use tokio::sync::broadcast;
-use tracing::{error, info};
+use tracing::{error, field::debug, info};
 
 #[async_trait]
 pub trait ISessionManager<S: ISession<F>, F: IFriendRepository>:
@@ -85,10 +85,10 @@ impl<S: ISession<F>, F: IFriendRepository> ISessionManager<S, F> for SessionMana
             };
 
             if !token_is_expired {
-                info!("Token is expired");
                 continue;
             }
             // Token is expired
+            tracing::debug!(target: "application", "[remove_expired_current_user_connections_sessions] User: {} token is expired, removing", &user_id);
             to_be_removed.push(user_id);
         }
         for user_id in to_be_removed {
@@ -96,8 +96,8 @@ impl<S: ISession<F>, F: IFriendRepository> ISessionManager<S, F> for SessionMana
                 .remove_from_current_user_connections(&user_id)
                 .await
                 .expect("Could not remove from current_user_connections");
-            info!(
-                "Removed {} from current_user_connections sessions due to session expiration",
+            tracing::debug!(
+                target: "application", "[remove_expired_current_user_connections_sessions] Removed {} from current_user_connections sessions due to session expiration",
                 user_id
             );
 

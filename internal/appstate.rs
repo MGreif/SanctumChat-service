@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Debug, marker::PhantomData, sync::Arc};
+use std::{fmt::Debug, marker::PhantomData};
 
 use axum::async_trait;
 use diesel::{
@@ -6,18 +6,11 @@ use diesel::{
     PgConnection,
 };
 use tokio::sync::broadcast;
-use tokio::sync::Mutex;
-use tracing::info;
 
 use crate::{
     config::ConfigManager,
-    entities::friends::{repository::IFriendRepository, service::FriendDomain},
-    handler::ws_handler::SocketMessageNotification,
-    helper::{
-        jwt::check_token_expiration,
-        session::{ISession, ISessionManager, SessionManager},
-        sql::get_friends_for_user_from_db,
-    },
+    entities::friends::repository::IFriendRepository,
+    helper::session::{ISession, ISessionManager},
     persistence::connection_manager::IConnectionManager,
 };
 

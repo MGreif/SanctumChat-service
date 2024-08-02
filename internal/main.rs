@@ -28,7 +28,7 @@ async fn main() {
     let config = config::ConfigManager::new();
 
     // This is needed. If the guards are _, the variables are deallocated and the logging does not work anymore
-    let (_access_guard, _error_guard) = initialize_logger();
+    let (_access_guard, _error_guard, _application_guard) = initialize_logger();
     let connection_manager = ConnectionManager::new(config.env.clone());
 
     let friend_domain = FriendDomain::new(FriendRepository {

@@ -207,6 +207,7 @@ pub async fn logout<
         .notify_offline(state.get_session_manager())
         .await;
 
+    tracing::debug!(target: "application", "[logout] user {} manually logged out", token.sub);
     HTTPResponse::<()> {
         message: Some(String::from("Successfully logged out")),
         data: None,

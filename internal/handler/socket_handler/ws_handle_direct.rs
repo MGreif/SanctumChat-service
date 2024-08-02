@@ -65,7 +65,7 @@ impl<SM: ISessionManager<S, F>, S: ISession<F>, F: IFriendRepository, C: IConnec
             pg_pool: C::new(app_state.get_config().env),
         };
 
-        let mut friend_domain = FriendDomain::new(friend_repo);
+        let friend_domain = FriendDomain::new(friend_repo);
         let mut message_domain = MessageDomain::new(message_repo);
         let recipient = match &self.recipient {
             None => {

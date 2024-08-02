@@ -1,9 +1,5 @@
-use axum::{
-    extract::{ConnectInfo, State},
-    http::StatusCode,
-    response::IntoResponse,
-};
-use std::{os::unix::net::SocketAddr, sync::Arc};
+use axum::{extract::State, http::StatusCode, response::IntoResponse};
+use std::sync::Arc;
 
 use crate::{
     appstate::{AppState, IAppState},

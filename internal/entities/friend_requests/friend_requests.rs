@@ -1,4 +1,5 @@
 use axum::http::StatusCode;
+use tracing::debug;
 use uuid::Uuid;
 
 use crate::{
@@ -76,7 +77,13 @@ impl<I: FriendRequestRepositoryInterface> FriendRequestDomain<I> {
             .save_friend_request(new_request.clone())
         {
             Err(err) => Err(HTTPResponse::new_internal_error(err)),
-            Ok(_) => Ok(new_request),
+            Ok(_) => {
+                debug!(
+                    target: "application", "[create_friend_request] friend request sent from {} to {}",
+                    &sender, &recipient
+                );
+                Ok(new_request)
+            }
         }
     }
 
@@ -88,9 +95,15 @@ impl<I: FriendRequestRepositoryInterface> FriendRequestDomain<I> {
     ) -> Result<(), HTTPResponse<()>> {
         match self
             .friend_request_repository
-            .update_friend_request_accepted(friend_request_id, &recipient, accepted)
+            .update_friend_request_accepted(&friend_request_id.clone(), &recipient, accepted)
         {
-            Ok(_) => Ok(()),
+            Ok(_) => {
+                debug!(
+                    target: "application", "[accept_or_deny_friend_request] {} accepted friend request: {}",
+                    &recipient, &friend_request_id
+                );
+                Ok(())
+            }
             Err(err) => Err(HTTPResponse::new_internal_error(err)),
         }
     }

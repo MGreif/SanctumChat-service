@@ -1,20 +1,5 @@
-use crate::{
-    handler::ws_handler::SocketMessageNotification,
-    helper::{
-        jwt::check_token_expiration,
-        session::{ISession, Session},
-        sql::get_friends_for_user_from_db,
-    },
-};
-use axum::async_trait;
-use diesel::{
-    r2d2::{self, ConnectionManager, Pool},
-    PgConnection,
-};
 use dotenv::dotenv;
-use std::{borrow::Borrow, collections::HashMap, env, fmt::Debug, sync::Arc};
-use tokio::sync::{broadcast, Mutex};
-use tracing::info;
+use std::{env, fmt::Debug};
 
 #[derive(Debug, serde::Serialize, Clone)]
 pub struct EnvConfig {

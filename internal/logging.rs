@@ -71,7 +71,7 @@ impl<B> OnRequest<B> for OnRequestLogger {
     }
 }
 
-pub fn initialize_logger() -> (WorkerGuard, WorkerGuard) {
+pub fn initialize_logger() -> (WorkerGuard, WorkerGuard, WorkerGuard) {
     let stdout_log = tracing_subscriber::fmt::layer()
         .with_writer(io::stdout)
         .with_target(true)
@@ -98,6 +98,16 @@ pub fn initialize_logger() -> (WorkerGuard, WorkerGuard) {
 
     let (error_log_handle, _error_guard) = tracing_appender::non_blocking(error_log_writer);
 
+    let application_log_writer = tracing_appender::rolling::Builder::new()
+        .filename_prefix("application")
+        .filename_suffix("log")
+        .rotation(Rotation::DAILY)
+        .build("./logs")
+        .expect("Could not initiate application_log");
+
+    let (application_log_handle, _application_guard) =
+        tracing_appender::non_blocking(application_log_writer);
+
     let access_log = tracing_subscriber::fmt::layer()
         .with_writer(access_log_handle)
         .with_line_number(false)
@@ -110,6 +120,12 @@ pub fn initialize_logger() -> (WorkerGuard, WorkerGuard) {
         .with_target(true)
         .json();
 
+    let application_log = tracing_subscriber::fmt::layer()
+        .with_writer(application_log_handle)
+        .with_line_number(false)
+        .with_target(false)
+        .json();
+
     tracing_subscriber::registry()
         .with(stdout_log)
         .with(
@@ -119,7 +135,13 @@ pub fn initialize_logger() -> (WorkerGuard, WorkerGuard) {
             ),
         )
         .with(error_log.with_filter(filter::LevelFilter::from_level(Level::ERROR)))
+        .with(
+            application_log.with_filter(
+                filter::Targets::new()
+                    .with_targets(vec![("application", LevelFilter::from_level(Level::TRACE))]),
+            ),
+        )
         .with(tracing_subscriber::filter::EnvFilter::from_default_env())
         .init();
-    return (_access_guard, _error_guard);
+    return (_access_guard, _error_guard, _application_guard);
 }
