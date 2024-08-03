@@ -337,10 +337,11 @@ pub async fn token<
         }
     };
 
-    let session_manager = S::new(user.clone(), token);
+    let session = S::new(user.clone(), token);
+    session.notify_online(app_state.get_session_manager()).await;
     app_state
         .get_session_manager()
-        .insert_into_current_user_connections(session_manager)
+        .insert_into_current_user_connections(session)
         .await;
 
     HTTPResponse::<String> {

@@ -9,7 +9,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 mod config;
 mod entities;
-mod handler;
 mod helper;
 mod interfaces;
 mod logging;

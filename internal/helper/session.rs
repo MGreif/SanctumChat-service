@@ -1,7 +1,7 @@
 use super::jwt::{check_token_expiration, Token};
 use crate::{
     entities::friends::{repository::IFriendRepository, service::FriendDomain},
-    handler::ws_handler::{
+    interfaces::websockets::socket_messages::{
         EEvent, SocketMessage, SocketMessageNotification, SocketMessageStatusChange,
     },
     models::UserDTO,
@@ -10,7 +10,7 @@ use axum::async_trait;
 use futures::lock::Mutex;
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 use tokio::sync::broadcast;
-use tracing::{error, field::debug, info};
+use tracing::error;
 
 #[async_trait]
 pub trait ISessionManager<S: ISession<F>, F: IFriendRepository>:
@@ -104,15 +104,13 @@ impl<S: ISession<F>, F: IFriendRepository> ISessionManager<S, F> for SessionMana
             let session_manager = session_manager.lock().await;
             session_manager.notify_offline(self).await;
             session_manager
-                .send_direct_message(
-                    crate::handler::ws_handler::SocketMessage::SocketMessageNotification(
-                        SocketMessageNotification::new(
-                            String::from("error"),
-                            String::from("Important"),
-                            String::from("Your session expired"),
-                        ),
+                .send_direct_message(SocketMessage::SocketMessageNotification(
+                    SocketMessageNotification::new(
+                        String::from("error"),
+                        String::from("Important"),
+                        String::from("Your session expired"),
                     ),
-                )
+                ))
                 .await;
         }
     }

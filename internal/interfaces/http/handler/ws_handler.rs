@@ -1,13 +1,15 @@
 use std::sync::Arc;
 
-use super::socket_handler::ws_handle_direct::SocketMessageDirect;
 use crate::{
     appstate::{AppState, IAppState},
     entities::friends::repository::IFriendRepository,
-    handler::socket_handler::ws_receive_handler::{ws_receive_handler, SocketMessageError},
     helper::{
         jwt::{token_into_typed, validate_user_token},
         session::{ISession, ISessionManager},
+    },
+    interfaces::websockets::{
+        socket_messages::{SocketMessage, SocketMessageError, SocketMessageOnlineUsers},
+        ws_receive_handler::ws_receive_handler,
     },
     persistence::connection_manager::IConnectionManager,
 };
@@ -22,7 +24,6 @@ use futures::{sink::SinkExt, stream::StreamExt};
 use serde_json::{from_str, to_string};
 use tokio::sync::Mutex;
 use tracing::info;
-use uuid::Uuid;
 
 #[derive(serde::Deserialize)]
 pub struct WsQuery {
@@ -40,107 +41,6 @@ pub async fn ws_handler<
     Query(query): Query<WsQuery>,
 ) -> Response {
     ws.on_upgrade(move |socket| handle_socket(socket, app_state.to_owned(), query))
-}
-
-#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
-pub struct SocketMessageNotification {
-    pub message: String,
-    pub title: String,
-    pub status: String,
-    pub TYPE: String,
-}
-
-impl SocketMessageNotification {
-    pub fn new(status: String, title: String, message: String) -> SocketMessageNotification {
-        SocketMessageNotification {
-            message,
-            status,
-            title,
-            TYPE: String::from("SOCKET_MESSAGE_NOTIFICATION"),
-        }
-    }
-}
-
-#[derive(Clone, serde::Serialize, serde::Deserialize, Debug)]
-
-pub enum EEvent {
-    ONLINE,
-    OFFLINE,
-}
-
-#[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]
-pub struct SocketMessageEvent {
-    event: EEvent,
-    pub TYPE: String,
-}
-
-impl SocketMessageEvent {
-    pub fn new(event: EEvent) -> SocketMessageEvent {
-        SocketMessageEvent {
-            event: EEvent::ONLINE,
-            TYPE: String::from("SOCKET_MESSAGE_EVENT"),
-        }
-    }
-}
-
-#[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]
-pub struct SocketMessageOnlineUsers {
-    pub online_users: Vec<String>,
-    pub TYPE: String,
-}
-
-impl SocketMessageOnlineUsers {
-    pub fn new(online_users: Vec<String>) -> SocketMessageOnlineUsers {
-        SocketMessageOnlineUsers {
-            online_users,
-            TYPE: String::from("SOCKET_MESSAGE_ONLINE_USERS"),
-        }
-    }
-}
-
-#[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]
-pub struct SocketMessageStatusChange {
-    pub status: EEvent,
-    pub user_id: String,
-    pub TYPE: String,
-}
-
-impl SocketMessageStatusChange {
-    pub fn new(status: EEvent, user_id: String) -> SocketMessageStatusChange {
-        SocketMessageStatusChange {
-            status,
-            user_id,
-            TYPE: String::from("SOCKET_MESSAGE_STATUS_CHANGE"),
-        }
-    }
-}
-
-#[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]
-pub struct SocketMessageFriendRequest {
-    pub sender_username: String,
-    pub friend_request_id: Uuid,
-    pub TYPE: String,
-}
-
-impl SocketMessageFriendRequest {
-    pub fn new(friend_request_id: Uuid, sender_username: String) -> SocketMessageFriendRequest {
-        SocketMessageFriendRequest {
-            friend_request_id,
-            sender_username,
-            TYPE: String::from("SOCKET_MESSAGE_FRIEND_REQUEST"),
-        }
-    }
-}
-
-#[derive(Clone, serde::Deserialize, serde::Serialize, Debug)]
-#[serde(untagged)]
-
-pub enum SocketMessage {
-    SocketMessageDirect(SocketMessageDirect),
-    SocketMessageNotification(SocketMessageNotification),
-    SocketMessageStatusChange(SocketMessageStatusChange),
-    SocketMessageOnlineUsers(SocketMessageOnlineUsers),
-    SocketMessageFriendRequest(SocketMessageFriendRequest),
 }
 
 async fn handle_socket<
@@ -277,17 +177,22 @@ async fn handle_socket<
     tokio::select! {
         _ = (&mut handle_receive_task) => {
             handle_client_session_receive_task.abort();
-            match app_state_clone2.get_session_manager().remove_from_current_user_connections(&token2.sub).await {
-                Ok(_) => {},
+            let session = match app_state_clone2.get_session_manager().remove_from_current_user_connections(&token2.sub).await {
+                Ok(s) => s,
                 Err(err) => return info!("Error ocurred removing user from current_user_connections: {}; Maybe the user session expired or the user already logged out", err)
             };
+            let session = session.lock().await;
+            session.notify_offline(app_state_clone2.get_session_manager()).await;
         },
         _ = (&mut handle_client_session_receive_task) => {
             handle_receive_task.abort();
-            match app_state_clone2.get_session_manager().remove_from_current_user_connections(&token2.sub).await {
-                Ok(_) => {},
-                Err(err) => info!("Error ocurred removing user from current_user_connections: {}; Maybe the user session expired or the user already logged out", err)
+            let session = match app_state_clone2.get_session_manager().remove_from_current_user_connections(&token2.sub).await {
+                Ok(s) => s,
+                Err(err) => return info!("Error ocurred removing user from current_user_connections: {}; Maybe the user session expired or the user already logged out", err)
             };
+            let session = session.lock().await;
+            session.notify_offline(app_state_clone2.get_session_manager()).await;
+
         },
     };
 }

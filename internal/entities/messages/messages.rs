@@ -3,10 +3,10 @@ use std::time::SystemTime;
 use uuid::Uuid;
 
 use crate::{
-    handler::socket_handler::{
-        ws_handle_direct::SocketMessageDirect, ws_receive_handler::SocketMessageError,
-    },
     helper::{errors::HTTPResponse, pagination::Pagination},
+    interfaces::websockets::{
+        messages::SocketMessageDirect::SocketMessageDirect, socket_messages::SocketMessageError,
+    },
     models::Message,
 };
 

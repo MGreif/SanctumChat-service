@@ -3,8 +3,8 @@ use std::{marker::PhantomData, sync::Arc, time::Duration};
 use crate::{
     appstate::IAppState,
     entities::friends::repository::{FriendDTO, IFriendRepository},
-    handler::ws_handler::SocketMessage,
     helper::session::ISessionManager,
+    interfaces::websockets::socket_messages::SocketMessage,
     models::UserDTO,
     persistence::connection_manager::IConnectionManager,
     AppState,
@@ -64,9 +64,7 @@ impl<F: IFriendRepository + Clone> ISession<F> for MockSession<F> {
     fn get_user(&self) -> crate::models::UserDTO {
         return self.user.clone();
     }
-    fn get_user_socket(
-        &self,
-    ) -> tokio::sync::broadcast::Sender<crate::handler::ws_handler::SocketMessage> {
+    fn get_user_socket(&self) -> tokio::sync::broadcast::Sender<SocketMessage> {
         return Sender::new(1);
     }
     fn new(user: crate::models::UserDTO, token: crate::helper::jwt::Token) -> Self {
@@ -123,6 +121,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_that_session_manager_can_add_sessions() {
+        initialize_testing_environment();
         let session_manager: SessionManager<
             MockSession<MockFriendRepository>,
             MockFriendRepository,
@@ -164,6 +163,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_that_session_manager_can_remove_sessions() {
+        initialize_testing_environment();
         let session_manager: SessionManager<
             MockSession<MockFriendRepository>,
             MockFriendRepository,

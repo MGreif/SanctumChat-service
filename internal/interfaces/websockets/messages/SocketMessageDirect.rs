@@ -1,19 +1,19 @@
 use crate::appstate::{AppState, IAppState};
 use crate::entities::friends::repository::IFriendRepository;
 use crate::helper::session::ISessionManager;
+use crate::interfaces::websockets::socket_messages::{
+    Receivable, SocketMessage, SocketMessageError,
+};
 use crate::persistence::connection_manager::IConnectionManager;
 use crate::{
     entities::{
         friends::{repository::FriendRepository, service::FriendDomain},
         messages::{messages::MessageDomain, repository::MessageRepository},
     },
-    handler::ws_handler::SocketMessage,
     helper::{jwt::Token, session::ISession},
 };
 use std::sync::Arc;
 use uuid::Uuid;
-
-use super::ws_receive_handler::{Receivable, SocketMessageError};
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub struct SocketMessageDirect {
@@ -56,7 +56,7 @@ impl<SM: ISessionManager<S, F>, S: ISession<F>, F: IFriendRepository, C: IConnec
         &self,
         app_state: Arc<AppState<SM, S, C, F>>,
         token: Token,
-    ) -> Result<(), super::ws_receive_handler::SocketMessageError> {
+    ) -> Result<(), SocketMessageError> {
         let message_repo = MessageRepository {
             pg_pool: app_state.get_db_pool(),
         };

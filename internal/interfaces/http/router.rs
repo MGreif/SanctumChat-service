@@ -18,12 +18,13 @@ use crate::{
         friends::{self, repository::IFriendRepository},
         messages, users,
     },
-    handler::{version_handler, ws_handler},
-    helper::session::{ISession, ISessionManager, Session},
+    helper::session::{ISession, ISessionManager},
     interfaces::http::middlewares,
     logging::{OnRequestLogger, OnResponseLogger},
     persistence::connection_manager::IConnectionManager,
 };
+
+use super::handler::{version_handler, ws_handler};
 
 pub fn get_main_router<
     SM: ISessionManager<S, F>,
