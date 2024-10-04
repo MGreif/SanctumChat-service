@@ -1,19 +1,8 @@
 use std::fmt::Debug;
-use std::sync::Arc;
 
 use crate::models::UserDTOSanitized;
-use crate::persistence;
 use crate::persistence::connection_manager::IConnectionManager;
 use diesel::prelude::*;
-use diesel::query_dsl::*;
-use diesel::sql_types::Numeric;
-use diesel::{
-    deserialize::FromSqlRow,
-    pg::Pg,
-    r2d2::{ConnectionManager, PooledConnection},
-    row::Field,
-    PgConnection,
-};
 use serde::Serialize;
 
 use crate::models::UserDTO;

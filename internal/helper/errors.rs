@@ -1,17 +1,10 @@
-use core::fmt;
-use std::num::NonZero;
-
 use axum::{
-    body::Body,
-    http::{Response, StatusCode},
+    http::StatusCode,
     response::IntoResponse,
 };
 use serde::Serialize;
 use serde_json::json;
-use tower_http::classify::{
-    ClassifiedResponse, ClassifyResponse, MapFailureClass, ServerErrorsAsFailures,
-    ServerErrorsFailureClass,
-};
+
 
 #[derive(Clone, Serialize)]
 pub struct FieldError {
