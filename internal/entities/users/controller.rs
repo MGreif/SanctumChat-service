@@ -8,7 +8,6 @@ use crate::{
     helper::{
         jwt::{hash_string, Token},
         keys::{generate_rsa_key_pair, validate_public_key},
-        session::Session,
     },
     models::UserDTO,
 };

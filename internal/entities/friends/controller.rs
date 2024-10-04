@@ -15,7 +15,6 @@ use axum::http::StatusCode;
 use axum::{extract::State, response::IntoResponse, Extension, Json};
 use diesel::prelude::*;
 use diesel::sql_types::{Bool, Nullable, Text, Uuid};
-use std::borrow::BorrowMut;
 use std::sync::Arc;
 
 use super::repository::IFriendRepository;

@@ -1,24 +1,19 @@
 use std::{
-    env, io,
-    time::{self, Duration, SystemTime},
+    io,
+    time::{self, SystemTime},
 };
 
 use axum::body::Body;
 use cookie::time::{format_description::well_known::Rfc3339, OffsetDateTime};
-use serde::Serialize;
 use serde_json::json;
-use tower_http::trace::{OnFailure, OnRequest, OnResponse};
-use tracing::{level_filters::LevelFilter, Level, Span};
+use tower_http::trace::{OnRequest, OnResponse};
+use tracing::{level_filters::LevelFilter, Level};
 use tracing_appender::{non_blocking::WorkerGuard, rolling::Rotation};
 use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
 #[derive(Clone)]
 pub struct OnResponseLogger {}
 
-trait Serializable {}
-
-// Implement the Serializable trait for all types that also implement Serialize
-impl<T: Serialize> Serializable for T {}
 
 impl OnResponseLogger {
     pub fn new() -> Self {

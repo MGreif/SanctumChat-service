@@ -1,17 +1,19 @@
 
-POSTGRES_CONTAINER=sanctumchat-postgres
+POSTGRES_CONTAINER=docker-sanctumchat-postgres-1
 
 
 .PHONY: start-dependencies
 start-dependencies:
-		docker start $(POSTGRES_CONTAINER)
+		docker compose -f ./docker/docker-compose-dependencies.yml up -d --remove-orphans
 
 start-service: start-dependencies
 		cargo run
 
-start-python-tests: run-migration
-		python3 tests/websocket/test.py
-
 run-migration:
-	diesel migration run
+		diesel migration run
 
+run-unit-tests:
+		cargo test
+
+run-service-tests: run-migration
+		python3 tests/websocket/test.py
