@@ -336,6 +336,22 @@ pub async fn token<
         }
     };
 
+    let user_id = &token.sub;
+
+    let available_session = app_state.get_session_manager().get_current_user_connections().lock().await;
+    let session = available_session.get(user_id);
+
+    if let Some(_) = session {
+        return     HTTPResponse::<String> {
+            data: Some(token_str),
+            message: None,
+            status: StatusCode::OK,
+        }
+        .into_response()
+    }
+
+    drop(available_session);
+
     let session = S::new(user.clone(), token);
     session.notify_online(app_state.get_session_manager()).await;
     app_state
