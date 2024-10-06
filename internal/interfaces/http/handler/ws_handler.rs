@@ -126,16 +126,19 @@ async fn handle_socket<
     let mut handle_client_session_receive_task = tokio::spawn(async move {
         while let Ok(msg) = client_session_receiver.recv().await {
             // If any websocket error, break loop.
-            if sender
+            match sender
                 .lock()
                 .await
                 .send(Message::Text(
                     to_string(&msg).unwrap_or_else(|err| err.to_string()),
                 ))
                 .await
-                .is_err()
             {
-                break;
+                Err(err) => {
+                    tracing::debug!(target: "application", "Websocket connection error: {}", &err);
+                    break;
+                },
+                Ok(_) => {}
             }
         }
     });
@@ -166,8 +169,10 @@ async fn handle_socket<
                 ws_receive_handler(message, app_state_clone.clone(), token.clone()).await
             {
                 let mut sender_in_receiver = sender_clone.lock().await;
+                let error_message = err.message;
+                tracing::error!(target: "websocket::handle_socket","{} - {}", &err.TYPE, &error_message);
                 sender_in_receiver
-                    .send(Message::Text(serde_json::to_string(&err).unwrap()))
+                    .send(Message::Text(err.TYPE))
                     .await
                     .unwrap();
             }
@@ -181,6 +186,7 @@ async fn handle_socket<
                 Ok(s) => s,
                 Err(err) => return info!("Error ocurred removing user from current_user_connections: {}; Maybe the user session expired or the user already logged out", err)
             };
+            tracing::debug!(target: "application", "Removed user due to session disconnect from browser");
             let session = session.lock().await;
             session.notify_offline(app_state_clone2.get_session_manager()).await;
         },
@@ -190,6 +196,7 @@ async fn handle_socket<
                 Ok(s) => s,
                 Err(err) => return info!("Error ocurred removing user from current_user_connections: {}; Maybe the user session expired or the user already logged out", err)
             };
+            tracing::debug!(target: "application", "Removed user due to session disconnect from internal session state");
             let session = session.lock().await;
             session.notify_offline(app_state_clone2.get_session_manager()).await;
 

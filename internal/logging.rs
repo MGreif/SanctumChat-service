@@ -122,11 +122,16 @@ pub fn initialize_logger() -> (WorkerGuard, WorkerGuard, WorkerGuard) {
         .json();
 
     tracing_subscriber::registry()
-        .with(stdout_log)
+        .with(stdout_log.with_filter(filter::Targets::new()
+                    .with_targets(vec![
+                        ("websocket", LevelFilter::from_level(Level::TRACE)),
+                        ("http", LevelFilter::from_level(Level::TRACE)),
+                        ("application", LevelFilter::from_level(Level::TRACE))
+                        ])))
         .with(
             access_log.with_filter(
                 filter::Targets::new()
-                    .with_targets(vec![("http", LevelFilter::from_level(Level::TRACE))]),
+                    .with_targets(vec![("http", LevelFilter::from_level(Level::TRACE)), ("websocket", LevelFilter::from_level(Level::TRACE))])
             ),
         )
         .with(error_log.with_filter(filter::LevelFilter::from_level(Level::ERROR)))

@@ -54,6 +54,7 @@ impl<S: ISession<F>, F: IFriendRepository> ISessionManager<S, F> for SessionMana
         let username = &session.clone().get_user().username;
         let session_manager = Arc::new(Mutex::new(session));
         current_user_connections.insert(username.to_owned(), session_manager);
+        tracing::debug!(target: "application", "[insert_into_current_user_connections] Inserted {} session", &username);
     }
 
     async fn remove_from_current_user_connections(
@@ -70,6 +71,7 @@ impl<S: ISession<F>, F: IFriendRepository> ISessionManager<S, F> for SessionMana
             }
             Some(user) => user.1,
         };
+        tracing::debug!(target: "application", "[remove_from_current_user_connections] Removed {} session", &username);
         Ok(session_manager)
     }
 
@@ -190,6 +192,7 @@ impl<F: IFriendRepository> ISession<F> for Session {
         self.user_socket.clone()
     }
     async fn send_direct_message(&self, message: SocketMessage) {
+        message.debug_trace();
         match self.user_socket.send(message) {
             Err(err) => error!("Error, probably no listeners; {}", err),
             Ok(_) => {}

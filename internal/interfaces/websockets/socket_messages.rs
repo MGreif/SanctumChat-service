@@ -31,6 +31,9 @@ impl SocketMessageNotification {
             TYPE: String::from("SOCKET_MESSAGE_NOTIFICATION"),
         }
     }
+    pub fn debug(&self) -> String {
+        return serde_json::to_string(self).expect("Could not serialize")
+    } 
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, Debug)]
@@ -142,4 +145,16 @@ pub enum SocketMessage {
     SocketMessageStatusChange(SocketMessageStatusChange),
     SocketMessageOnlineUsers(SocketMessageOnlineUsers),
     SocketMessageFriendRequest(SocketMessageFriendRequest),
+}
+
+impl SocketMessage {
+    pub fn debug_trace(&self) {
+        match self {
+            SocketMessage::SocketMessageDirect(m) => tracing::trace!(target: "websocket::message", "SocketMessageDirect: {} -> {}", m.sender.clone().unwrap_or_else(||String::from("_")), m.recipient.clone().unwrap_or_else(||String::from("_"))),
+            SocketMessage::SocketMessageFriendRequest(m) => tracing::trace!(target: "websocket::message", "{}: {} sent a friendrequest", m.TYPE, m.sender_username),
+            SocketMessage::SocketMessageNotification(m) => tracing::trace!(target: "websocket::message", "{}: {} ", m.TYPE, m.debug()),
+            SocketMessage::SocketMessageOnlineUsers(m) => tracing::trace!(target: "websocket::message", "{}", m.TYPE),
+            SocketMessage::SocketMessageStatusChange(m) => tracing::trace!(target: "websocket::message", "{}: user: {} status: {:?}", m.TYPE, m.user_id, m.status),
+        };
+    }
 }
