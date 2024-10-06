@@ -107,11 +107,16 @@ impl<SM: ISessionManager<S, F>, S: ISession<F>, F: IFriendRepository, C: IConnec
         let message = message_domain.direct_message_to_message_entity(&direct_message);
         let message = match message {
             Ok(m) => m,
-            Err(err) => return Err(SocketMessageError::new(err)),
+            Err(err) => {
+                return Err(SocketMessageError::new(err))
+            }
         };
 
         match message_domain.save_message(&message) {
-            Err(err) => return Err(err),
+            Err(err) => {
+                tracing::error!("{}", &err);
+                return Err(SocketMessageError::new(String::from("An error ocurred while saving the message ...")))
+            },
             Ok(_) => {}
         };
 

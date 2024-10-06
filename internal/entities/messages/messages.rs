@@ -67,10 +67,10 @@ impl<I: MessageRepositoryInterface> MessageDomain<I> {
         return Ok(message_db);
     }
 
-    pub fn save_message(&mut self, message: &Message) -> Result<(), SocketMessageError> {
+    pub fn save_message(&mut self, message: &Message) -> Result<(), String> {
         let result = self.message_repository.save_message(message);
         match result {
-            Err(err) => return Err(SocketMessageError::new(err)),
+            Err(err) => return Err(err),
             Ok(res) => Ok(res),
         }
     }

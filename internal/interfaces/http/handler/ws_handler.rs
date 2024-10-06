@@ -169,10 +169,10 @@ async fn handle_socket<
                 ws_receive_handler(message, app_state_clone.clone(), token.clone()).await
             {
                 let mut sender_in_receiver = sender_clone.lock().await;
-                let error_message = err.message;
+                let error_message = &err.message;
                 tracing::error!(target: "websocket::handle_socket","{} - {}", &err.TYPE, &error_message);
                 sender_in_receiver
-                    .send(Message::Text(err.TYPE))
+                    .send(Message::Text(serde_json::to_string(&err).unwrap()))
                     .await
                     .unwrap();
             }

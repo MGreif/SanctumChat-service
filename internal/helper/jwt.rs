@@ -55,14 +55,8 @@ pub fn create_user_token(user: UserDTO, secret_key: &[u8], expires: Duration) ->
 }
 
 pub fn validate_user_token(token: String, secret_key: &[u8]) -> Result<bool, String> {
-    let key: Hmac<Sha256> = Hmac::new_from_slice(secret_key).unwrap();
-    let claims_wrapped: Result<BTreeMap<String, String>, jwt::Error> = token.verify_with_key(&key);
 
-    match claims_wrapped {
-        Err(err) => return Err(format!("Error validating user token - {}", err)),
-        Ok(res) => res,
-    };
-
+    // the function token_into_typed validates the token
     let token = match token_into_typed(&token, secret_key) {
         Err(err) => return Err(err),
         Ok(t) => t,
